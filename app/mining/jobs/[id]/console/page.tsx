@@ -21,7 +21,8 @@ import {
   Eye,
   EyeOff,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Database
 } from "lucide-react";
 
 // Types matching backend schema
