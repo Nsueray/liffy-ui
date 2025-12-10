@@ -110,7 +110,7 @@ function StatusBadge({ status }: { status: MiningJobStatus }) {
     paused: "bg-gray-100 text-gray-800 border-gray-200"
   };
 
-  const icons: Record<MiningJobStatus, JSX.Element> = {
+  const icons: Record<MiningJobStatus, any> = {
     pending: <Clock className="h-3 w-3" />,
     running: <RefreshCw className="h-3 w-3 animate-spin" />,
     completed: <CheckCircle className="h-3 w-3" />,
