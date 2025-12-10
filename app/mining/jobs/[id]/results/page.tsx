@@ -260,7 +260,7 @@ export default function MiningJobResultsPage({ params }: PageProps) {
       }
       
       const data = await res.json();
-      const items: MiningResult[] = data.results || data.items || [];
+      const items: any[] = data.results || data.items || [];
       
       // Transform data if needed (handle backward compatibility)
       const transformedResults = items.map(item => ({
