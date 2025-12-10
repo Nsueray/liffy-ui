@@ -66,11 +66,7 @@ async function proxyRequest(
 }
 
 // GET /api/mining/jobs/[id]/results → BACKEND_URL/api/mining/jobs/{id}/results
-export async function GET(
-  req: Request,
-  context: { params: { id: string } }
-) {
-  const { id } = context.params;
-  return proxyRequest(req, `/api/mining/jobs/${id}/results`);
+export async function GET(request: any, context: any) {
+  const id = context?.params?.id;
+  return proxyRequest(request as Request, `/api/mining/jobs/${id}/results`);
 }
-
