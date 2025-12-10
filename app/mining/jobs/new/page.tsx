@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { getAuthHeaders } from "@/lib/auth";
 
 type Strategy = "playwright" | "http" | "auto";
 type JobType = "url" | "file";
@@ -125,7 +126,10 @@ export default function NewMiningJobPage() {
       // Backend endpoint'i hazırsa yorum satırından çıkarılabilir
       const res = await fetch("/api/mining/jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          ...(getAuthHeaders() ?? {}),
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(payload),
       });
 

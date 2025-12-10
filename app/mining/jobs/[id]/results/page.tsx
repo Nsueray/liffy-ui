@@ -30,6 +30,7 @@ import {
   ExternalLink,
   Database
 } from "lucide-react";
+import { getAuthHeaders } from "@/lib/auth";
 
 // Types matching backend schema
 type MiningResult = {
@@ -247,14 +248,18 @@ export default function MiningJobResultsPage({ params }: PageProps) {
       setError(null);
 
       // Fetch job details
-      const jobRes = await fetch(`/api/mining/jobs/${jobId}`);
+      const jobRes = await fetch(`/api/mining/jobs/${jobId}`, {
+        headers: getAuthHeaders(),
+      });
       if (jobRes.ok) {
         const jobData = await jobRes.json();
         setJob(jobData.job || jobData);
       }
 
       // Fetch results
-      const res = await fetch(`/api/mining/jobs/${jobId}/results`);
+      const res = await fetch(`/api/mining/jobs/${jobId}/results`, {
+        headers: getAuthHeaders(),
+      });
       if (!res.ok) {
         throw new Error(`Failed to fetch results: ${res.status}`);
       }
@@ -406,7 +411,10 @@ export default function MiningJobResultsPage({ params }: PageProps) {
         Object.entries(editedResults).map(([id, changes]) =>
           fetch(`/api/mining/results/${id}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              ...(getAuthHeaders() ?? {}),
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify(changes)
           })
         )
@@ -447,7 +455,10 @@ export default function MiningJobResultsPage({ params }: PageProps) {
     try {
       const res = await fetch("/api/leads/import", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          ...(getAuthHeaders() ?? {}),
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           job_id: jobId,
           result_ids: selectedIds
@@ -518,7 +529,10 @@ export default function MiningJobResultsPage({ params }: PageProps) {
     try {
       const res = await fetch("/api/verification/verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          ...(getAuthHeaders() ?? {}),
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ emails: emailsToVerify })
       });
       
@@ -539,7 +553,10 @@ export default function MiningJobResultsPage({ params }: PageProps) {
     try {
       await Promise.all(
         selectedIds.map(id =>
-          fetch(`/api/mining/results/${id}`, { method: "DELETE" })
+          fetch(`/api/mining/results/${id}`, {
+            method: "DELETE",
+            headers: getAuthHeaders(),
+          })
         )
       );
       
