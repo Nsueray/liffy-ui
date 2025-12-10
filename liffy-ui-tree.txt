@@ -1,0 +1,75 @@
+.
+├── #
+├── README.md
+├── app
+│   ├── api
+│   │   ├── leads
+│   │   │   └── import
+│   │   ├── mining
+│   │   │   ├── jobs
+│   │   │   └── results
+│   │   └── verification
+│   │       └── verify
+│   ├── campaigns
+│   │   └── page.tsx
+│   ├── dashboard
+│   │   └── page.tsx
+│   ├── favicon.ico
+│   ├── globals.css
+│   ├── layout.tsx
+│   ├── leads
+│   │   └── page.tsx
+│   ├── lists
+│   │   └── page.tsx
+│   ├── login
+│   │   └── page.tsx
+│   ├── mining
+│   │   └── jobs
+│   │       ├── [id]
+│   │       ├── new
+│   │       └── page.tsx
+│   ├── page.tsx
+│   ├── prospects
+│   │   └── page.tsx
+│   ├── settings
+│   │   └── page.tsx
+│   └── templates
+│       └── page.tsx
+├── components
+│   ├── layout-client.tsx
+│   ├── mining
+│   │   ├── retry-history.tsx
+│   │   └── retry-job-button.tsx
+│   ├── sidebar.tsx
+│   └── ui
+│       ├── badge.tsx
+│       ├── button.tsx
+│       ├── card.tsx
+│       ├── dropdown-menu.tsx
+│       ├── input.tsx
+│       ├── separator.tsx
+│       ├── sheet.tsx
+│       ├── table.tsx
+│       └── tooltip.tsx
+├── components.json
+├── eslint.config.mjs
+├── hooks
+│   └── use-retry-job.ts
+├── lib
+│   └── utils.ts
+├── liffy-ui-tree.txt
+├── next-env.d.ts
+├── next.config.ts
+├── package-lock.json
+├── package.json
+├── postcss.config.mjs
+├── public
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── liffy-logo.png
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
+└── tsconfig.json
+
+29 directories, 44 files
