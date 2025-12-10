@@ -65,20 +65,13 @@ async function proxyRequest(
 }
 
 // PATCH /api/mining/results/[id]
-export async function PATCH(
-  req: Request,
-  context: { params: { id: string } }
-) {
-  const { id } = context.params;
-  return proxyRequest(req, `/api/mining/results/${id}`);
+export async function PATCH(request: any, context: any) {
+  const id = context?.params?.id;
+  return proxyRequest(request as Request, `/api/mining/results/${id}`);
 }
 
 // DELETE /api/mining/results/[id]
-export async function DELETE(
-  req: Request,
-  context: { params: { id: string } }
-) {
-  const { id } = context.params;
-  return proxyRequest(req, `/api/mining/results/${id}`);
+export async function DELETE(request: any, context: any) {
+  const id = context?.params?.id;
+  return proxyRequest(request as Request, `/api/mining/results/${id}`);
 }
-
