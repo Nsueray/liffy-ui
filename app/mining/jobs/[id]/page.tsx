@@ -32,6 +32,7 @@ import {
   PauseCircle,
   StopCircle
 } from "lucide-react";
+import { getAuthHeaders } from "@/lib/auth";
 
 type MiningJobStatus = "pending" | "running" | "completed" | "failed" | "paused";
 type Strategy = "auto" | "playwright" | "http";
@@ -243,6 +244,7 @@ export default function MiningJobDetailsPage({ params }: PageProps) {
     try {
       const res = await fetch(`/api/mining/jobs/${jobId}`, {
         cache: "no-store",
+        headers: getAuthHeaders(),
       });
 
       if (!res.ok) {
@@ -287,7 +289,10 @@ export default function MiningJobDetailsPage({ params }: PageProps) {
     try {
       await fetch(`/api/mining/jobs/${jobId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          ...(getAuthHeaders() ?? {}),
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ notes: notesValue })
       });
       if (job) {
@@ -304,7 +309,10 @@ export default function MiningJobDetailsPage({ params }: PageProps) {
     
     setDeleting(true);
     try {
-      await fetch(`/api/mining/jobs/${jobId}`, { method: "DELETE" });
+      await fetch(`/api/mining/jobs/${jobId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
       router.push("/mining/jobs");
     } catch (err) {
       console.error("Failed to delete job:", err);
@@ -314,7 +322,10 @@ export default function MiningJobDetailsPage({ params }: PageProps) {
 
   const handleRetry = async () => {
     try {
-      const res = await fetch(`/api/mining/jobs/${jobId}/retry`, { method: "POST" });
+      const res = await fetch(`/api/mining/jobs/${jobId}/retry`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
       const data = await res.json();
       router.push(`/mining/jobs/${data.new_job_id}/console`);
     } catch (err) {
@@ -324,7 +335,10 @@ export default function MiningJobDetailsPage({ params }: PageProps) {
 
   const handlePause = async () => {
     try {
-      await fetch(`/api/mining/jobs/${jobId}/pause`, { method: "POST" });
+      await fetch(`/api/mining/jobs/${jobId}/pause`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
       fetchJob();
     } catch (err) {
       console.error("Failed to pause job:", err);
@@ -333,7 +347,10 @@ export default function MiningJobDetailsPage({ params }: PageProps) {
 
   const handleResume = async () => {
     try {
-      await fetch(`/api/mining/jobs/${jobId}/resume`, { method: "POST" });
+      await fetch(`/api/mining/jobs/${jobId}/resume`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
       fetchJob();
     } catch (err) {
       console.error("Failed to resume job:", err);
@@ -343,7 +360,10 @@ export default function MiningJobDetailsPage({ params }: PageProps) {
   const handleStop = async () => {
     if (!confirm("Stop this job? You can retry it later.")) return;
     try {
-      await fetch(`/api/mining/jobs/${jobId}/cancel`, { method: "POST" });
+      await fetch(`/api/mining/jobs/${jobId}/cancel`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
       fetchJob();
     } catch (err) {
       console.error("Failed to stop job:", err);

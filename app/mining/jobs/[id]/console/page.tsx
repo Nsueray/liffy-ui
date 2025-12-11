@@ -24,6 +24,7 @@ import {
   Minimize2,
   Database
 } from "lucide-react";
+import { getAuthHeaders } from "@/lib/auth";
 
 // Types matching backend schema
 type MiningJobStatus = "pending" | "running" | "completed" | "failed" | "paused";
@@ -207,17 +208,21 @@ export default function MiningJobConsolePage({ params }: PageProps) {
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      
+
       // Fetch job details
-      const jobRes = await fetch(`/api/mining/jobs/${jobId}`);
+      const jobRes = await fetch(`/api/mining/jobs/${jobId}`, {
+        headers: getAuthHeaders(),
+      });
       if (!jobRes.ok) {
         throw new Error(`Failed to fetch job: ${jobRes.status}`);
       }
       const jobData = await jobRes.json();
       setJob(jobData.job || jobData);
-      
+
       // Fetch logs
-      const logsRes = await fetch(`/api/mining/jobs/${jobId}/logs`);
+      const logsRes = await fetch(`/api/mining/jobs/${jobId}/logs`, {
+        headers: getAuthHeaders(),
+      });
       if (!logsRes.ok) {
         // Use mock logs in development
         setLogs(MOCK_LOGS);
@@ -300,7 +305,10 @@ export default function MiningJobConsolePage({ params }: PageProps) {
   // Actions
   const handlePause = async () => {
     try {
-      await fetch(`/api/mining/jobs/${jobId}/pause`, { method: "POST" });
+      await fetch(`/api/mining/jobs/${jobId}/pause`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
       fetchData();
     } catch (err) {
       console.error("Error pausing job:", err);
@@ -309,7 +317,10 @@ export default function MiningJobConsolePage({ params }: PageProps) {
 
   const handleResume = async () => {
     try {
-      await fetch(`/api/mining/jobs/${jobId}/resume`, { method: "POST" });
+      await fetch(`/api/mining/jobs/${jobId}/resume`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
       fetchData();
     } catch (err) {
       console.error("Error resuming job:", err);
@@ -319,7 +330,10 @@ export default function MiningJobConsolePage({ params }: PageProps) {
   const handleCancel = async () => {
     if (!confirm("Are you sure you want to cancel this job?")) return;
     try {
-      await fetch(`/api/mining/jobs/${jobId}/cancel`, { method: "POST" });
+      await fetch(`/api/mining/jobs/${jobId}/cancel`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
       fetchData();
     } catch (err) {
       console.error("Error cancelling job:", err);

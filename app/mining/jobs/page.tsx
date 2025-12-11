@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  ChevronLeft,
+  ChevronRight,
   RefreshCw, 
   Download, 
   Trash2, 
@@ -22,6 +22,7 @@ import {
   Mail
 } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { getAuthHeaders } from "@/lib/auth";
 
 // Import the RetryJobButton component
 // Assuming you have this component in your components folder
@@ -46,11 +47,12 @@ function RetryJobButton({
     if (!confirm(`Retry job "${jobName || jobId}"?`)) return;
     
     setRetrying(true);
-    
+
     try {
       const response = await fetch(`/api/mining/jobs/${jobId}/retry`, {
         method: "POST",
         headers: {
+          ...(getAuthHeaders() ?? {}),
           "Content-Type": "application/json",
         },
       });
@@ -155,7 +157,9 @@ function useMiningJobs(page: number, search: string, statusFilter: MiningJobStat
         ...(statusFilter !== "all" && { status: statusFilter })
       });
 
-      const res = await fetch(`/api/mining/jobs?${params}`);
+      const res = await fetch(`/api/mining/jobs?${params}`, {
+        headers: getAuthHeaders(),
+      });
       
       if (!res.ok) throw new Error("Failed to fetch jobs");
       
@@ -383,8 +387,11 @@ export default function MiningJobsPage() {
     
     try {
       await Promise.all(
-        selectedJobs.map(id => 
-          fetch(`/api/mining/jobs/${id}`, { method: "DELETE" })
+        selectedJobs.map(id =>
+          fetch(`/api/mining/jobs/${id}`, {
+            method: "DELETE",
+            headers: getAuthHeaders(),
+          })
         )
       );
       setSelectedJobs([]);
