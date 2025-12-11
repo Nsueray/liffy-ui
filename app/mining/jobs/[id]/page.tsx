@@ -1,5 +1,7 @@
 "use client";
 
+import React from "react"; // ✅ React import ekle JSX için
+import { ReactElement } from "react"; // ✅ ReactElement type için
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -107,7 +109,8 @@ function StatusBadge({ status }: { status: MiningJobStatus }) {
     cancelled: "bg-gray-100 text-gray-800 border-gray-200"
   };
 
-  const icons: Record<MiningJobStatus, JSX.Element> = {
+  // ✅ ReactElement kullan JSX.Element yerine
+  const icons: Record<MiningJobStatus, ReactElement> = {
     pending: <Clock className="h-3 w-3" />,
     running: <RefreshCw className="h-3 w-3 animate-spin" />,
     completed: <CheckCircle className="h-3 w-3" />,
