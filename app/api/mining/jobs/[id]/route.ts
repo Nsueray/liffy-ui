@@ -145,32 +145,41 @@ async function proxyRequest(
 /**
  * GET /api/mining/jobs/[id]
  * Fetch a single job
+ * 
+ * IMPORTANT: Next.js 16 change - params is now a Promise
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params; // Next.js 16 - await params
   return proxyRequest(request, params.id);
 }
 
 /**
  * PATCH /api/mining/jobs/[id]
  * Update a job
+ * 
+ * IMPORTANT: Next.js 16 change - params is now a Promise
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params; // Next.js 16 - await params
   return proxyRequest(request, params.id);
 }
 
 /**
  * DELETE /api/mining/jobs/[id]
  * Delete/cancel a job
+ * 
+ * IMPORTANT: Next.js 16 change - params is now a Promise
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params; // Next.js 16 - await params
   return proxyRequest(request, params.id);
 }

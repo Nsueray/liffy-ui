@@ -1,134 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const BACKEND_URL = process.env.BACKEND_URL;
+
 /**
  * POST /api/mining/jobs/[id]/retry
- * 
- * Retry a failed or completed mining job
- * Creates a new job with same configuration
+ * IMPORTANT: Next.js 16 change - params is now a Promise
  */
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await context.params;
-  const jobId = id;
-  
+  const params = await context.params; // Next.js 16 - await params
+  const jobId = params.id;
+
+  if (!BACKEND_URL) {
+    return NextResponse.json(
+      { error: "Server misconfiguration: BACKEND_URL missing" },
+      { status: 500 }
+    );
+  }
+
   try {
-    // Get auth token from headers if needed
-    const authHeader = request.headers.get("Authorization");
+    const authHeader = request.headers.get("authorization");
     
-    // 1. First, fetch the original job to get its configuration
-    const jobResponse = await fetch(
-      `${process.env.BACKEND_URL || "http://localhost:3001"}/api/mining/jobs/${jobId}`,
+    // Proxy to backend
+    const response = await fetch(
+      `${BACKEND_URL}/api/mining/jobs/${jobId}/retry`,
       {
+        method: "POST",
         headers: authHeader ? { Authorization: authHeader } : {},
       }
     );
-    
-    if (!jobResponse.ok) {
-      if (jobResponse.status === 404) {
-        return NextResponse.json(
-          { error: "Mining job not found" },
-          { status: 404 }
-        );
-      }
-      throw new Error(`Failed to fetch job: ${jobResponse.status}`);
-    }
-    
-    const originalJob = await jobResponse.json();
-    const job = originalJob.job || originalJob;
-    
-    // 2. Check if job can be retried
-    if (job.status === "running" || job.status === "pending") {
-      return NextResponse.json(
-        { error: "Cannot retry a job that is still running or pending" },
-        { status: 400 }
-      );
-    }
-    
-    // 3. Create a new job with same configuration
-    const retryPayload = {
-      name: `${job.name} (Retry)`,
-      type: job.type || "url",
-      input: job.input,
-      strategy: job.strategy || "playwright",
-      site_profile: job.site_profile,
-      config: job.config || {},
-      status: "pending",
-      notes: `Retry of job ${jobId}. Original job status: ${job.status}`,
-      parent_job_id: jobId, // Reference to original job
-    };
-    
-    // 4. Create the new job
-    const createResponse = await fetch(
-      `${process.env.BACKEND_URL || "http://localhost:3001"}/api/mining/jobs`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(authHeader ? { Authorization: authHeader } : {}),
-        },
-        body: JSON.stringify(retryPayload),
-      }
-    );
-    
-    if (!createResponse.ok) {
-      const errorData = await createResponse.json().catch(() => ({}));
-      throw new Error(
-        errorData.error || `Failed to create retry job: ${createResponse.status}`
-      );
-    }
-    
-    const newJob = await createResponse.json();
-    
-    // 5. Optionally, update the original job to mark it as retried
-    await fetch(
-      `${process.env.BACKEND_URL || "http://localhost:3001"}/api/mining/jobs/${jobId}`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(authHeader ? { Authorization: authHeader } : {}),
-        },
-        body: JSON.stringify({
-          retry_job_id: newJob.job?.id || newJob.id,
-          notes: `${job.notes || ""}\n[Retried at ${new Date().toISOString()}]`,
-        }),
-      }
-    ).catch((err) => {
-      // Non-critical error, just log it
-      console.error("Failed to update original job:", err);
-    });
-    
-    // 6. Start the job immediately (optional)
-    if (process.env.AUTO_START_RETRY === "true") {
-      await fetch(
-        `${process.env.BACKEND_URL || "http://localhost:3001"}/api/mining/jobs/${newJob.job?.id || newJob.id}/start`,
-        {
-          method: "POST",
-          headers: authHeader ? { Authorization: authHeader } : {},
-        }
-      ).catch((err) => {
-        console.error("Failed to auto-start job:", err);
-      });
-    }
-    
-    return NextResponse.json({
-      success: true,
-      message: "Mining job retry created successfully",
-      original_job_id: jobId,
-      new_job_id: newJob.job?.id || newJob.id,
-      job: newJob.job || newJob,
-    });
-    
+
+    const data = await response.json();
+    return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error("Error retrying mining job:", error);
-    
+    console.error("Error in retry route:", error);
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to retry mining job",
-        details: error instanceof Error ? error.stack : undefined,
-      },
+      { error: "Failed to retry job" },
       { status: 500 }
     );
   }
@@ -136,46 +45,40 @@ export async function POST(
 
 /**
  * GET /api/mining/jobs/[id]/retry
- * 
- * Get retry history for a job
+ * IMPORTANT: Next.js 16 change - params is now a Promise
  */
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await context.params;
-  const jobId = id;
-  
+  const params = await context.params; // Next.js 16 - await params
+  const jobId = params.id;
+
+  if (!BACKEND_URL) {
+    return NextResponse.json(
+      { error: "Server misconfiguration: BACKEND_URL missing" },
+      { status: 500 }
+    );
+  }
+
   try {
-    const authHeader = request.headers.get("Authorization");
+    const authHeader = request.headers.get("authorization");
+    const searchParams = request.nextUrl.searchParams;
     
-    // Fetch all jobs that are retries of this job
+    // Proxy to backend
     const response = await fetch(
-      `${process.env.BACKEND_URL || "http://localhost:3001"}/api/mining/jobs?parent_job_id=${jobId}`,
+      `${BACKEND_URL}/api/mining/jobs/${jobId}/retry?${searchParams}`,
       {
         headers: authHeader ? { Authorization: authHeader } : {},
       }
     );
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch retry history: ${response.status}`);
-    }
-    
+
     const data = await response.json();
-    
-    return NextResponse.json({
-      original_job_id: jobId,
-      retries: data.jobs || [],
-      total_retries: data.total || 0,
-    });
-    
+    return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error("Error fetching retry history:", error);
-    
+    console.error("Error in retry history route:", error);
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to fetch retry history",
-      },
+      { error: "Failed to fetch retry history" },
       { status: 500 }
     );
   }
