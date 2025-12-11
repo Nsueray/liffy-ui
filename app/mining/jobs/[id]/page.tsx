@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -69,12 +69,6 @@ type MiningJobDetail = {
   parent_job_id?: string;
   retry_job_id?: string;
   notes?: string | null;
-};
-
-type PageProps = {
-  params: {
-    id: string;
-  };
 };
 
 // Utility functions
@@ -225,9 +219,10 @@ function buildMockJob(jobId: string): MiningJobDetail {
   };
 }
 
-export default function MiningJobDetailsPage({ params }: PageProps) {
+export default function MiningJobDetailsPage() {
   const router = useRouter();
-  const jobId = params.id;
+  const params = useParams<{ id: string }>();
+  const jobId = params.id as string;
 
   const [job, setJob] = useState<MiningJobDetail | null>(null);
   const [loading, setLoading] = useState(true);

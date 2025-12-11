@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import {
   Download,
   Upload,
@@ -76,10 +76,6 @@ type Summary = {
     invalid: number;
     risky: number;
   };
-};
-
-type PageProps = {
-  params: { id: string };
 };
 
 // Mock data for development
@@ -218,9 +214,10 @@ function EditableCell({
   );
 }
 
-export default function MiningJobResultsPage({ params }: PageProps) {
+export default function MiningJobResultsPage() {
   const router = useRouter();
-  const jobId = params.id;
+  const params = useParams<{ id: string }>();
+  const jobId = params.id as string;
 
   // State
   const [job, setJob] = useState<JobSummary | null>(null);
