@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import {
   Play,
   Pause,
@@ -64,10 +64,6 @@ type LogEntry = {
   level: LogLevel;
   message: string;
   details?: any;
-};
-
-type PageProps = {
-  params: { id: string };
 };
 
 // Mock logs for development
@@ -149,9 +145,10 @@ function StatCard({ label, value, icon: Icon, trend }: any) {
   );
 }
 
-export default function MiningJobConsolePage({ params }: PageProps) {
+export default function MiningJobConsolePage() {
   const router = useRouter();
-  const jobId = params.id;
+  const params = useParams<{ id: string }>();
+  const jobId = params.id as string;
   
   // State
   const [job, setJob] = useState<JobDetail | null>(null);
