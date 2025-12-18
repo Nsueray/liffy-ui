@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   Play,
@@ -9,7 +15,6 @@ import {
   Download,
   RefreshCw,
   Search,
-  Filter,
   Copy,
   CheckCircle,
   XCircle,
@@ -22,12 +27,17 @@ import {
   EyeOff,
   Maximize2,
   Minimize2,
-  Database
+  Database,
 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
 
 // Types matching backend schema
-type MiningJobStatus = "pending" | "running" | "completed" | "failed" | "paused";
+type MiningJobStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "paused";
 type LogLevel = "debug" | "info" | "warn" | "error" | "success";
 
 type JobDetail = {
@@ -66,7 +76,7 @@ type LogEntry = {
   details?: any;
 };
 
-// Mock logs for development
+// Mock logs for development (şimdilik prod'da kullanmıyoruz, ama dursun)
 const MOCK_LOGS: LogEntry[] = [
   { timestamp: new Date().toISOString(), level: "info", message: "⛏️ Mining Worker started" },
   { timestamp: new Date().toISOString(), level: "info", message: "📥 Mining job fetch: bd4fccb0-00e7-4992-a355-95189bb580c2" },
@@ -86,6 +96,13 @@ const MOCK_LOGS: LogEntry[] = [
   { timestamp: new Date().toISOString(), level: "error", message: "❌ Error visiting exhibitor 60: Timeout 30000ms exceeded" },
 ];
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_REGEX.test(value);
+}
+
 // Components
 function StatusBadge({ status }: { status: MiningJobStatus }) {
   const styles = {
@@ -93,7 +110,7 @@ function StatusBadge({ status }: { status: MiningJobStatus }) {
     running: "bg-blue-100 text-blue-800 border-blue-200",
     completed: "bg-green-100 text-green-800 border-green-200",
     failed: "bg-red-100 text-red-800 border-red-200",
-    paused: "bg-gray-100 text-gray-800 border-gray-200"
+    paused: "bg-gray-100 text-gray-800 border-gray-200",
   };
 
   const icons = {
@@ -101,11 +118,13 @@ function StatusBadge({ status }: { status: MiningJobStatus }) {
     running: <RefreshCw className="h-3 w-3 animate-spin" />,
     completed: <CheckCircle className="h-3 w-3" />,
     failed: <XCircle className="h-3 w-3" />,
-    paused: <Pause className="h-3 w-3" />
+    paused: <Pause className="h-3 w-3" />,
   };
 
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium border ${styles[status]}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium border ${styles[status]}`}
+    >
       {icons[status]}
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
@@ -118,10 +137,14 @@ function LogLevelBadge({ level }: { level: LogLevel }) {
     info: "text-blue-400",
     warn: "text-yellow-400",
     error: "text-red-400",
-    success: "text-green-400"
+    success: "text-green-400",
   };
 
-  return <span className={`font-medium ${styles[level]}`}>[{level.toUpperCase()}]</span>;
+  return (
+    <span className={`font-medium ${styles[level]}`}>
+      [{level.toUpperCase()}]
+    </span>
+  );
 }
 
 function StatCard({ label, value, icon: Icon, trend }: any) {
@@ -130,11 +153,11 @@ function StatCard({ label, value, icon: Icon, trend }: any) {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-medium text-gray-500">{label}</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">{value.toLocaleString()}</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">
+            {Number(value || 0).toLocaleString()}
+          </p>
           {trend && (
-            <p className="mt-1 text-xs text-green-600">
-              +{trend} new
-            </p>
+            <p className="mt-1 text-xs text-green-600">+{trend} new</p>
           )}
         </div>
         <div className="rounded-lg bg-gray-100 p-2">
@@ -147,9 +170,16 @@ function StatCard({ label, value, icon: Icon, trend }: any) {
 
 export default function MiningJobConsolePage() {
   const router = useRouter();
-  const params = useParams<{ id: string }>();
-  const jobId = params.id as string;
-  
+  const params = useParams();
+  const rawId = params?.id;
+
+  const jobId = useMemo(() => {
+    if (typeof rawId === "string") return rawId;
+    if (Array.isArray(rawId) && rawId.length > 0)
+      return rawId[0] as string;
+    return "";
+  }, [rawId]);
+
   // State
   const [job, setJob] = useState<JobDetail | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -158,57 +188,70 @@ export default function MiningJobConsolePage() {
   const [autoScroll, setAutoScroll] = useState(true);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedLevels, setSelectedLevels] = useState<LogLevel[]>(["info", "warn", "error", "success"]);
+  const [selectedLevels, setSelectedLevels] = useState<LogLevel[]>([
+    "info",
+    "warn",
+    "error",
+    "success",
+  ]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
-  
+
   const logContainerRef = useRef<HTMLDivElement | null>(null);
   const [previousLogCount, setPreviousLogCount] = useState(0);
 
   // Calculate progress
   const progress = useMemo(() => {
     if (!job) return 0;
-    
-    // If job has explicit progress field, use it
+
     if (job.progress !== undefined) return job.progress;
-    
-    // Otherwise calculate from pages
-    if (job.total_pages && job.total_pages > 0 && job.processed_pages !== undefined) {
+
+    if (job.total_pages && job.total_pages > 0 && job.processed_pages != null) {
       return Math.round((job.processed_pages / job.total_pages) * 100);
     }
-    
-    // For completed jobs
+
     if (job.status === "completed") return 100;
     if (job.status === "pending") return 0;
-    
+
     return 0;
   }, [job]);
 
   // Filter logs
   const filteredLogs = useMemo(() => {
-    return logs.filter(log => {
-      // Level filter
-      if (!selectedLevels.includes(log.level) && !(log.level === "debug" && showDebugLogs)) {
+    return logs.filter((log) => {
+      if (
+        !selectedLevels.includes(log.level) &&
+        !(log.level === "debug" && showDebugLogs)
+      ) {
         return false;
       }
-      
-      // Search filter
-      if (searchTerm && !log.message.toLowerCase().includes(searchTerm.toLowerCase())) {
+
+      if (
+        searchTerm &&
+        !log.message.toLowerCase().includes(searchTerm.toLowerCase())
+      ) {
         return false;
       }
-      
+
       return true;
     });
   }, [logs, selectedLevels, showDebugLogs, searchTerm]);
 
   // Fetch job details and logs
   const fetchData = useCallback(async () => {
+    if (!jobId || !isValidUuid(jobId)) {
+      return;
+    }
+
     try {
       setError(null);
+      setLoading(true);
+
+      const authHeaders = getAuthHeaders() ?? {};
 
       // Fetch job details
       const jobRes = await fetch(`/api/mining/jobs/${jobId}`, {
-        headers: getAuthHeaders(),
+        headers: authHeaders,
       });
       if (!jobRes.ok) {
         throw new Error(`Failed to fetch job: ${jobRes.status}`);
@@ -218,49 +261,27 @@ export default function MiningJobConsolePage() {
 
       // Fetch logs
       const logsRes = await fetch(`/api/mining/jobs/${jobId}/logs`, {
-        headers: getAuthHeaders(),
+        headers: authHeaders,
       });
       if (!logsRes.ok) {
-        // Use mock logs in development
-        setLogs(MOCK_LOGS);
-      } else {
-        const logsData = await logsRes.json();
-        const entries = Array.isArray(logsData) ? logsData : (logsData.logs || []);
-        setLogs(entries);
-        
-        // Check for new logs
-        if (entries.length > previousLogCount) {
-          setPreviousLogCount(entries.length);
-          setLastUpdate(new Date());
-        }
+        throw new Error(`Failed to fetch logs: ${logsRes.status}`);
+      }
+
+      const logsData = await logsRes.json();
+      const entries: LogEntry[] = Array.isArray(logsData)
+        ? logsData
+        : logsData.logs || [];
+
+      setLogs(entries);
+
+      // Check for new logs
+      if (entries.length > previousLogCount) {
+        setPreviousLogCount(entries.length);
+        setLastUpdate(new Date());
       }
     } catch (err) {
       console.error("Error fetching data:", err);
       setError(err instanceof Error ? err.message : "An error occurred");
-      
-      // Use mock data in development
-      if (!job) {
-        setJob({
-          id: jobId,
-          organizer_id: "org_1",
-          name: "Big5 Nigeria Exhibitors",
-          type: "url",
-          input: "https://exhibitors.big5constructnigeria.com/...",
-          strategy: "playwright",
-          site_profile: "big5",
-          status: "running",
-          progress: 45,
-          total_found: 89,
-          total_emails_raw: 67,
-          total_prospects_created: 0,
-          processed_pages: 89,
-          total_pages: 172,
-          created_at: new Date().toISOString(),
-          started_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
-        setLogs(MOCK_LOGS);
-      }
     } finally {
       setLoading(false);
     }
@@ -268,17 +289,22 @@ export default function MiningJobConsolePage() {
 
   // Initial fetch and polling
   useEffect(() => {
+    if (!jobId || !isValidUuid(jobId)) {
+      setLoading(false);
+      return;
+    }
+
     fetchData();
-    
+
     // Poll every 2 seconds if job is running
     const interval = setInterval(() => {
       if (job?.status === "running" || job?.status === "pending") {
         fetchData();
       }
     }, 2000);
-    
+
     return () => clearInterval(interval);
-  }, [fetchData, job?.status]);
+  }, [fetchData, job?.status, jobId]);
 
   // Auto-scroll
   useEffect(() => {
@@ -288,15 +314,9 @@ export default function MiningJobConsolePage() {
     el.scrollTop = el.scrollHeight;
   }, [filteredLogs, autoScroll]);
 
-  // WebSocket for real-time logs (future enhancement)
+  // (Future) WebSocket
   useEffect(() => {
-    // TODO: Implement WebSocket connection
-    // const ws = new WebSocket(`ws://localhost:3000/ws/jobs/${jobId}/logs`);
-    // ws.onmessage = (event) => {
-    //   const log = JSON.parse(event.data);
-    //   setLogs(prev => [...prev, log]);
-    // };
-    // return () => ws.close();
+    // WebSocket entegrasyonu ileride
   }, [jobId]);
 
   // Actions
@@ -338,33 +358,65 @@ export default function MiningJobConsolePage() {
   };
 
   const handleExportLogs = () => {
-    const content = filteredLogs.map(log => 
-      `[${new Date(log.timestamp).toISOString()}] [${log.level.toUpperCase()}] ${log.message}`
-    ).join("\n");
-    
+    const content = filteredLogs
+      .map(
+        (log) =>
+          `[${new Date(log.timestamp).toISOString()}] [${log.level.toUpperCase()}] ${
+            log.message
+          }`
+      )
+      .join("\n");
+
     const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `job-${jobId}-logs-${Date.now()}.txt`;
+    a.download = `job-${jobId || "unknown"}-logs-${Date.now()}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const copyLogsToClipboard = () => {
-    const content = filteredLogs.map(log => 
-      `[${new Date(log.timestamp).toISOString()}] [${log.level.toUpperCase()}] ${log.message}`
-    ).join("\n");
+    const content = filteredLogs
+      .map(
+        (log) =>
+          `[${new Date(log.timestamp).toISOString()}] [${log.level.toUpperCase()}] ${
+            log.message
+          }`
+      )
+      .join("\n");
     navigator.clipboard.writeText(content);
   };
 
   const toggleLevel = (level: LogLevel) => {
-    setSelectedLevels(prev => 
-      prev.includes(level) 
-        ? prev.filter(l => l !== level)
+    setSelectedLevels((prev) =>
+      prev.includes(level)
+        ? prev.filter((l) => l !== level)
         : [...prev, level]
     );
   };
+
+  // Invalid / missing jobId → early UI
+  if (!jobId || !isValidUuid(jobId)) {
+    return (
+      <div className="flex flex-col gap-4 p-6">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.push("/mining/jobs")}
+            className="p-2 hover:bg-gray-100 rounded-lg"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-semibold">Mining Job Console</h1>
+            <p className="text-sm text-gray-500">
+              Invalid or missing job ID in URL.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Render
   if (loading && !job) {
@@ -376,7 +428,11 @@ export default function MiningJobConsolePage() {
   }
 
   return (
-    <div className={`flex flex-col gap-4 ${isFullscreen ? 'fixed inset-0 z-50 bg-white p-4' : ''}`}>
+    <div
+      className={`flex flex-col gap-4 ${
+        isFullscreen ? "fixed inset-0 z-50 bg-white p-4" : ""
+      }`}
+    >
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -396,7 +452,7 @@ export default function MiningJobConsolePage() {
             </div>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {/* Job Actions */}
           {job?.status === "running" && (
@@ -417,7 +473,8 @@ export default function MiningJobConsolePage() {
               Resume
             </button>
           )}
-          {(job?.status === "running" || job?.status === "paused") && (
+          {(job?.status === "running" ||
+            job?.status === "paused") && (
             <button
               onClick={handleCancel}
               className="inline-flex items-center px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-md hover:bg-red-50"
@@ -428,7 +485,9 @@ export default function MiningJobConsolePage() {
           )}
           {job?.status === "completed" && (
             <button
-              onClick={() => router.push(`/mining/jobs/${jobId}/results`)}
+              onClick={() =>
+                router.push(`/mining/jobs/${jobId}/results`)
+              }
               className="inline-flex items-center px-3 py-1.5 text-sm text-white bg-orange-500 rounded-md hover:bg-orange-600"
             >
               <Eye className="h-4 w-4 mr-1" />
@@ -453,11 +512,12 @@ export default function MiningJobConsolePage() {
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium">Progress</span>
               <span className="text-sm text-gray-500">
-                {progress}% • {job?.processed_pages || 0}/{job?.total_pages || "?"} pages
+                {progress}% • {job?.processed_pages || 0}/
+                {job?.total_pages || "?"} pages
               </span>
             </div>
             <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-              <div 
+              <div
                 className="h-full bg-gradient-to-r from-orange-400 to-orange-600 rounded-full transition-all duration-500"
                 style={{ width: `${progress}%` }}
               />
@@ -469,20 +529,20 @@ export default function MiningJobConsolePage() {
             )}
           </div>
         </div>
-        
-        <StatCard 
-          label="Total Found" 
+
+        <StatCard
+          label="Total Found"
           value={job?.total_found || 0}
           icon={Database}
           trend={job?.status === "running" ? "+12" : null}
         />
-        <StatCard 
-          label="With Emails" 
+        <StatCard
+          label="With Emails"
           value={job?.total_emails_raw || 0}
           icon={Activity}
         />
-        <StatCard 
-          label="Prospects" 
+        <StatCard
+          label="Prospects"
           value={job?.total_prospects_created || 0}
           icon={CheckCircle}
         />
@@ -498,25 +558,31 @@ export default function MiningJobConsolePage() {
           </div>
           <div>
             <span className="text-gray-500">Profile:</span>
-            <span className="ml-2 font-medium">{job?.site_profile || "auto"}</span>
+            <span className="ml-2 font-medium">
+              {job?.site_profile || "auto"}
+            </span>
           </div>
           <div>
             <span className="text-gray-500">Max Pages:</span>
-            <span className="ml-2 font-medium">{job?.config?.max_pages || "∞"}</span>
+            <span className="ml-2 font-medium">
+              {job?.config?.max_pages || "∞"}
+            </span>
           </div>
           <div>
             <span className="text-gray-500">Started:</span>
             <span className="ml-2 font-medium">
-              {job?.started_at ? new Date(job.started_at).toLocaleTimeString() : "—"}
+              {job?.started_at
+                ? new Date(job.started_at).toLocaleTimeString()
+                : "—"}
             </span>
           </div>
         </div>
         {job?.input && (
           <div className="mt-3 pt-3 border-t">
             <span className="text-sm text-gray-500">Target URL:</span>
-            <a 
-              href={job.input} 
-              target="_blank" 
+            <a
+              href={job.input}
+              target="_blank"
               rel="noopener noreferrer"
               className="ml-2 text-sm text-blue-600 hover:underline"
             >
@@ -539,7 +605,7 @@ export default function MiningJobConsolePage() {
               Last update: {lastUpdate.toLocaleTimeString()}
             </span>
           </div>
-          
+
           <div className="flex items-center gap-2">
             {/* Search */}
             <div className="relative">
@@ -552,24 +618,26 @@ export default function MiningJobConsolePage() {
                 className="pl-7 pr-3 py-1 text-xs bg-gray-800 text-gray-200 rounded border border-gray-700 focus:border-gray-600 focus:outline-none"
               />
             </div>
-            
+
             {/* Level Filters */}
             <div className="flex items-center gap-1">
-              {(["info", "warn", "error", "success"] as LogLevel[]).map(level => (
-                <button
-                  key={level}
-                  onClick={() => toggleLevel(level)}
-                  className={`px-2 py-0.5 text-xs rounded ${
-                    selectedLevels.includes(level)
-                      ? "bg-gray-700 text-gray-200"
-                      : "bg-gray-800 text-gray-500"
-                  }`}
-                >
-                  {level}
-                </button>
-              ))}
+              {(["info", "warn", "error", "success"] as LogLevel[]).map(
+                (level) => (
+                  <button
+                    key={level}
+                    onClick={() => toggleLevel(level)}
+                    className={`px-2 py-0.5 text-xs rounded ${
+                      selectedLevels.includes(level)
+                        ? "bg-gray-700 text-gray-200"
+                        : "bg-gray-800 text-gray-500"
+                    }`}
+                  >
+                    {level}
+                  </button>
+                )
+              )}
             </div>
-            
+
             {/* Actions */}
             <div className="flex items-center gap-1 border-l border-gray-700 pl-2">
               <button
@@ -620,37 +688,40 @@ export default function MiningJobConsolePage() {
             </div>
           </div>
         </div>
-        
+
         {/* Console Body */}
         <div
           ref={logContainerRef}
           className="h-[500px] overflow-auto bg-black p-4 font-mono text-xs leading-relaxed"
-          style={{ maxHeight: isFullscreen ? "calc(100vh - 250px)" : "500px" }}
+          style={{
+            maxHeight: isFullscreen ? "calc(100vh - 250px)" : "500px",
+          }}
         >
           {filteredLogs.length === 0 ? (
             <div className="text-gray-500">
-              {searchTerm 
+              {searchTerm
                 ? "No logs matching your search"
                 : "Waiting for logs..."}
             </div>
           ) : (
             filteredLogs.map((log, idx) => {
-              const levelColors = {
+              const levelColors: Record<LogLevel, string> = {
                 debug: "text-gray-500",
                 info: "text-gray-300",
                 warn: "text-yellow-400",
                 error: "text-red-400",
-                success: "text-green-400"
+                success: "text-green-400",
               };
-              
+
               return (
-                <div key={idx} className="group hover:bg-gray-900/50 px-2 -mx-2 py-0.5">
+                <div
+                  key={idx}
+                  className="group hover:bg-gray-900/50 px-2 -mx-2 py-0.5"
+                >
                   <span className="text-gray-600">
                     [{new Date(log.timestamp).toLocaleTimeString()}]
-                  </span>
-                  {" "}
-                  <LogLevelBadge level={log.level} />
-                  {" "}
+                  </span>{" "}
+                  <LogLevelBadge level={log.level} />{" "}
                   <span className={levelColors[log.level]}>
                     {log.message}
                   </span>
@@ -664,7 +735,7 @@ export default function MiningJobConsolePage() {
             })
           )}
         </div>
-        
+
         {/* Console Footer */}
         <div className="border-t border-gray-800 bg-gray-900 px-3 py-1.5 flex items-center justify-between">
           <span className="text-xs text-gray-500">

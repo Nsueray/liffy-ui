@@ -4,33 +4,29 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   Download,
-  Upload,
   Mail,
   Globe,
   Phone,
-  User,
   MapPin,
   Check,
   X,
   Edit2,
   Save,
   RefreshCw,
-  Filter,
   Search,
   ChevronLeft,
   ChevronRight,
-  FileSpreadsheet,
   UserPlus,
   AlertCircle,
   CheckCircle,
   XCircle,
-  Building,
   Trash2,
   Copy,
   ExternalLink,
-  Database
 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
+
+const isDev = process.env.NODE_ENV !== "production";
 
 // Types matching backend schema
 type MiningResult = {
@@ -39,14 +35,14 @@ type MiningResult = {
   company_name: string | null;
   contact_name: string | null;
   job_title: string | null;
-  emails: string[];  // Array of emails
+  emails: string[]; // Array of emails
   website: string | null;
   phone: string | null;
   country: string | null;
   city: string | null;
   address?: string | null;
   source_url?: string | null;
-  confidence_score?: number;  // 0-100
+  confidence_score?: number; // 0-100
   verification_status?: "unverified" | "valid" | "invalid" | "risky";
   status: "new" | "reviewed" | "imported" | "skipped";
   created_at: string;
@@ -95,7 +91,7 @@ const MOCK_RESULTS: MiningResult[] = [
     confidence_score: 95,
     verification_status: "valid",
     status: "new",
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
   },
   {
     id: "2",
@@ -111,30 +107,41 @@ const MOCK_RESULTS: MiningResult[] = [
     confidence_score: 88,
     verification_status: "unverified",
     status: "new",
-    created_at: new Date().toISOString()
-  }
+    created_at: new Date().toISOString(),
+  },
 ];
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_REGEX.test(value);
+}
 
 // Components
 function VerificationBadge({ status }: { status?: string }) {
   if (!status) return null;
-  
+
   const styles = {
     valid: "bg-green-100 text-green-800 border-green-200",
     unverified: "bg-gray-100 text-gray-800 border-gray-200",
     invalid: "bg-red-100 text-red-800 border-red-200",
-    risky: "bg-yellow-100 text-yellow-800 border-yellow-200"
+    risky: "bg-yellow-100 text-yellow-800 border-yellow-200",
   };
 
   const icons = {
     valid: <CheckCircle className="h-3 w-3" />,
     unverified: <AlertCircle className="h-3 w-3" />,
     invalid: <XCircle className="h-3 w-3" />,
-    risky: <AlertCircle className="h-3 w-3" />
+    risky: <AlertCircle className="h-3 w-3" />,
   };
 
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium border rounded-full ${styles[status as keyof typeof styles] || styles.unverified}`}>
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium border rounded-full ${
+        styles[status as keyof typeof styles] || styles.unverified
+      }`}
+    >
       {icons[status as keyof typeof icons]}
       {status}
     </span>
@@ -142,23 +149,24 @@ function VerificationBadge({ status }: { status?: string }) {
 }
 
 function ConfidenceScore({ score }: { score?: number }) {
-  if (!score) return null;
-  
-  const color = score >= 80 ? "text-green-600" : score >= 60 ? "text-yellow-600" : "text-red-600";
-  
-  return (
-    <span className={`text-xs font-medium ${color}`}>
-      {score}%
-    </span>
-  );
+  if (score == null) return null;
+
+  const color =
+    score >= 80
+      ? "text-green-600"
+      : score >= 60
+      ? "text-yellow-600"
+      : "text-red-600";
+
+  return <span className={`text-xs font-medium ${color}`}>{score}%</span>;
 }
 
-function EditableCell({ 
-  value, 
-  onSave, 
-  type = "text" 
-}: { 
-  value: string | null; 
+function EditableCell({
+  value,
+  onSave,
+  type = "text",
+}: {
+  value: string | null;
   onSave: (value: string) => void;
   type?: "text" | "email" | "url";
 }) {
@@ -216,8 +224,15 @@ function EditableCell({
 
 export default function MiningJobResultsPage() {
   const router = useRouter();
-  const params = useParams<{ id: string }>();
-  const jobId = params.id as string;
+  const params = useParams();
+  const rawId = params?.id;
+
+  const jobId = useMemo(() => {
+    if (typeof rawId === "string") return rawId;
+    if (Array.isArray(rawId) && rawId.length > 0)
+      return rawId[0] as string;
+    return "";
+  }, [rawId]);
 
   // State
   const [job, setJob] = useState<JobSummary | null>(null);
@@ -225,28 +240,43 @@ export default function MiningJobResultsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [editedResults, setEditedResults] = useState<Record<string, Partial<MiningResult>>>({});
-  
+  const [editedResults, setEditedResults] = useState<
+    Record<string, Partial<MiningResult>>
+  >({});
+
   // Filters
   const [search, setSearch] = useState("");
-  const [emailFilter, setEmailFilter] = useState<"all" | "with" | "without">("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "new" | "reviewed" | "imported" | "skipped">("all");
-  const [verificationFilter, setVerificationFilter] = useState<"all" | "valid" | "unverified" | "invalid" | "risky">("all");
+  const [emailFilter, setEmailFilter] = useState<
+    "all" | "with" | "without"
+  >("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "new" | "reviewed" | "imported" | "skipped"
+  >("all");
+  const [verificationFilter, setVerificationFilter] = useState<
+    "all" | "valid" | "unverified" | "invalid" | "risky"
+  >("all");
   const [countryFilter, setCountryFilter] = useState<string>("all");
-  
+
   // Pagination
   const [page, setPage] = useState(1);
   const ITEMS_PER_PAGE = 50;
 
   // Fetch data
   const fetchResults = useCallback(async () => {
+    if (!jobId || !isValidUuid(jobId)) {
+      // Geçersiz veya eksik jobId varsa backend'e istek atma
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
 
+      const authHeaders = getAuthHeaders() ?? {};
+
       // Fetch job details
       const jobRes = await fetch(`/api/mining/jobs/${jobId}`, {
-        headers: getAuthHeaders(),
+        headers: authHeaders,
       });
       if (jobRes.ok) {
         const jobData = await jobRes.json();
@@ -255,32 +285,40 @@ export default function MiningJobResultsPage() {
 
       // Fetch results
       const res = await fetch(`/api/mining/jobs/${jobId}/results`, {
-        headers: getAuthHeaders(),
+        headers: authHeaders,
       });
       if (!res.ok) {
         throw new Error(`Failed to fetch results: ${res.status}`);
       }
-      
+
       const data = await res.json();
-      const items: any[] = data.results || data.items || [];
-      
+      const items: any[] = data.results || data.items || data || [];
+
       // Transform data if needed (handle backward compatibility)
-      const transformedResults = items.map(item => ({
+      const transformedResults: MiningResult[] = items.map((item: any) => ({
         ...item,
-        emails: Array.isArray(item.emails) ? item.emails : 
-                item.email ? [item.email] : [],
-        company_name: item.company_name || item.companyName || item.company,
+        emails: Array.isArray(item.emails)
+          ? item.emails
+          : item.email
+          ? [item.email]
+          : [],
+        company_name:
+          item.company_name || item.companyName || item.company || null,
         verification_status: item.verification_status || "unverified",
-        status: item.status || "new"
+        status: item.status || "new",
       }));
-      
+
       setResults(transformedResults);
     } catch (err) {
       console.error("Error loading results:", err);
-      setError(err instanceof Error ? err.message : "Failed to load results");
-      
-      // Use mock data in development
-      setResults(MOCK_RESULTS);
+      setError(
+        err instanceof Error ? err.message : "Failed to load results"
+      );
+
+      // Sadece development ortamında mock data göster
+      if (isDev) {
+        setResults(MOCK_RESULTS);
+      }
     } finally {
       setLoading(false);
     }
@@ -290,30 +328,36 @@ export default function MiningJobResultsPage() {
     fetchResults();
   }, [fetchResults]);
 
+  // Filtre değişince sayfayı başa al
+  useEffect(() => {
+    setPage(1);
+  }, [search, emailFilter, statusFilter, verificationFilter, countryFilter]);
+
   // Calculate summary
   const summary = useMemo((): Summary => {
     const total = results.length;
-    const withEmail = results.filter(r => r.emails.length > 0).length;
+    const withEmail = results.filter((r) => r.emails.length > 0).length;
     const withoutEmail = total - withEmail;
-    const reviewed = results.filter(r => r.status === "reviewed").length;
-    const imported = results.filter(r => r.status === "imported").length;
+    const reviewed = results.filter((r) => r.status === "reviewed").length;
+    const imported = results.filter((r) => r.status === "imported").length;
 
     const countries: Record<string, number> = {};
     const verificationStats = {
       verified: 0,
       unverified: 0,
       invalid: 0,
-      risky: 0
+      risky: 0,
     };
 
-    results.forEach(r => {
+    results.forEach((r) => {
       // Countries
       const country = r.country || "Unknown";
       countries[country] = (countries[country] || 0) + 1;
-      
+
       // Verification
       if (r.verification_status === "valid") verificationStats.verified++;
-      else if (r.verification_status === "invalid") verificationStats.invalid++;
+      else if (r.verification_status === "invalid")
+        verificationStats.invalid++;
       else if (r.verification_status === "risky") verificationStats.risky++;
       else verificationStats.unverified++;
     });
@@ -325,26 +369,30 @@ export default function MiningJobResultsPage() {
       reviewed,
       imported,
       countries,
-      verification_stats: verificationStats
+      verification_stats: verificationStats,
     };
   }, [results]);
 
   // Filter results
   const filteredResults = useMemo(() => {
-    return results.filter(r => {
+    return results.filter((r) => {
       // Email filter
       if (emailFilter === "with" && r.emails.length === 0) return false;
       if (emailFilter === "without" && r.emails.length > 0) return false;
-      
+
       // Status filter
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
-      
+
       // Verification filter
-      if (verificationFilter !== "all" && r.verification_status !== verificationFilter) return false;
-      
+      if (
+        verificationFilter !== "all" &&
+        r.verification_status !== verificationFilter
+      )
+        return false;
+
       // Country filter
       if (countryFilter !== "all" && r.country !== countryFilter) return false;
-      
+
       // Search
       if (search) {
         const searchLower = search.toLowerCase();
@@ -355,15 +403,25 @@ export default function MiningJobResultsPage() {
           r.website,
           r.phone,
           r.country,
-          r.city
-        ].filter(Boolean).join(" ").toLowerCase();
-        
+          r.city,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
         if (!searchableText.includes(searchLower)) return false;
       }
-      
+
       return true;
     });
-  }, [results, emailFilter, statusFilter, verificationFilter, countryFilter, search]);
+  }, [
+    results,
+    emailFilter,
+    statusFilter,
+    verificationFilter,
+    countryFilter,
+    search,
+  ]);
 
   // Paginated results
   const paginatedResults = useMemo(() => {
@@ -372,83 +430,105 @@ export default function MiningJobResultsPage() {
     return filteredResults.slice(start, end);
   }, [filteredResults, page]);
 
-  const totalPages = Math.ceil(filteredResults.length / ITEMS_PER_PAGE);
+  const totalPages =
+    filteredResults.length === 0
+      ? 1
+      : Math.ceil(filteredResults.length / ITEMS_PER_PAGE);
 
   // Actions
   const handleSelectAll = () => {
     if (selectedIds.length === paginatedResults.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(paginatedResults.map(r => r.id));
+      setSelectedIds(paginatedResults.map((r) => r.id));
     }
   };
 
   const toggleSelection = (id: string) => {
-    setSelectedIds(prev =>
-      prev.includes(id)
-        ? prev.filter(i => i !== id)
-        : [...prev, id]
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
   };
 
-  const handleEditCell = (resultId: string, field: string, value: string) => {
-    setEditedResults(prev => ({
+  const handleEditCell = (
+    resultId: string,
+    field: string,
+    value: string
+  ) => {
+    setEditedResults((prev) => ({
       ...prev,
       [resultId]: {
         ...prev[resultId],
-        [field]: value
-      }
+        [field]: value,
+      },
     }));
   };
 
   const handleSaveEdits = async () => {
+    const entries = Object.entries(editedResults);
+    if (entries.length === 0) return;
+
     try {
       // Save edited results to backend
       await Promise.all(
-        Object.entries(editedResults).map(([id, changes]) =>
+        entries.map(([id, changes]) =>
           fetch(`/api/mining/results/${id}`, {
             method: "PATCH",
             headers: {
               ...(getAuthHeaders() ?? {}),
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(changes)
+            body: JSON.stringify(changes),
           })
         )
       );
-      
+
       // Update local state
-      setResults(prev => prev.map(r => ({
-        ...r,
-        ...editedResults[r.id]
-      })));
-      
+      setResults((prev) =>
+        prev.map((r) => ({
+          ...r,
+          ...(editedResults[r.id] || {}),
+        }))
+      );
+
       setEditedResults({});
       alert("Changes saved successfully");
     } catch (err) {
+      console.error("Error saving edits:", err);
       alert("Error saving changes");
     }
   };
 
   const handleImportToLeads = async () => {
-    const selectedResults = results.filter(r => selectedIds.includes(r.id));
-    
+    if (!jobId || !isValidUuid(jobId)) {
+      alert("Geçersiz job ID – lütfen Mining Jobs sayfasından tekrar deneyin.");
+      return;
+    }
+
+    const selectedResults = results.filter((r) =>
+      selectedIds.includes(r.id)
+    );
+
     if (selectedResults.length === 0) {
       alert("Please select results to import");
       return;
     }
-    
+
     // Check if emails are verified
     const unverifiedCount = selectedResults.filter(
-      r => r.verification_status !== "valid"
+      (r) => r.verification_status !== "valid"
     ).length;
-    
+
     if (unverifiedCount > 0) {
-      if (!confirm(`${unverifiedCount} results are not verified. Continue importing?`)) {
+      if (
+        !confirm(
+          `${unverifiedCount} results are not verified. Continue importing?`
+        )
+      ) {
         return;
       }
     }
-    
+
     try {
       const res = await fetch("/api/leads/import", {
         method: "POST",
@@ -458,71 +538,95 @@ export default function MiningJobResultsPage() {
         },
         body: JSON.stringify({
           job_id: jobId,
-          result_ids: selectedIds
-        })
+          result_ids: selectedIds,
+        }),
       });
-      
+
       if (!res.ok) throw new Error("Import failed");
-      
+
       const data = await res.json();
       alert(`Successfully imported ${data.imported} leads`);
-      
+
       // Update status
-      setResults(prev => prev.map(r => 
-        selectedIds.includes(r.id) 
-          ? { ...r, status: "imported" as const }
-          : r
-      ));
-      
+      setResults((prev) =>
+        prev.map((r) =>
+          selectedIds.includes(r.id)
+            ? ({ ...r, status: "imported" } as MiningResult)
+            : r
+        )
+      );
+
       setSelectedIds([]);
     } catch (err) {
+      console.error("Error importing to leads:", err);
       alert("Error importing to leads");
     }
   };
 
   const handleExportCSV = () => {
-    const selectedResults = selectedIds.length > 0
-      ? results.filter(r => selectedIds.includes(r.id))
-      : filteredResults;
-    
-    const csv = [
-      ["Company", "Contact Name", "Job Title", "Emails", "Website", "Phone", "Country", "City", "Confidence", "Verification"],
-      ...selectedResults.map(r => [
-        r.company_name || "",
-        r.contact_name || "",
-        r.job_title || "",
-        r.emails.join("; "),
-        r.website || "",
-        r.phone || "",
-        r.country || "",
-        r.city || "",
-        r.confidence_score?.toString() || "",
-        r.verification_status || ""
-      ])
-    ].map(row => row.map(cell => `"${cell}"`).join(",")).join("\n");
-    
+    const selectedResults =
+      selectedIds.length > 0
+        ? results.filter((r) => selectedIds.includes(r.id))
+        : filteredResults;
+
+    const csv =
+      [
+        [
+          "Company",
+          "Contact Name",
+          "Job Title",
+          "Emails",
+          "Website",
+          "Phone",
+          "Country",
+          "City",
+          "Confidence",
+          "Verification",
+        ],
+        ...selectedResults.map((r) => [
+          r.company_name || "",
+          r.contact_name || "",
+          r.job_title || "",
+          r.emails.join("; "),
+          r.website || "",
+          r.phone || "",
+          r.country || "",
+          r.city || "",
+          r.confidence_score?.toString() || "",
+          r.verification_status || "",
+        ]),
+      ]
+        .map((row) => row.map((cell) => `"${cell}"`).join(","))
+        .join("\n");
+
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `mining-results-${jobId}-${Date.now()}.csv`;
+    a.download = `mining-results-${jobId || "unknown"}-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const handleVerifyEmails = async () => {
-    const selectedResults = results.filter(r => selectedIds.includes(r.id));
-    const emailsToVerify = selectedResults.flatMap(r => r.emails);
-    
+    const selectedResults = results.filter((r) =>
+      selectedIds.includes(r.id)
+    );
+    const emailsToVerify = selectedResults.flatMap((r) => r.emails);
+
     if (emailsToVerify.length === 0) {
       alert("No emails to verify");
       return;
     }
-    
-    if (!confirm(`Verify ${emailsToVerify.length} emails? This will use your verification credits.`)) {
+
+    if (
+      !confirm(
+        `Verify ${emailsToVerify.length} emails? This will use your verification credits.`
+      )
+    ) {
       return;
     }
-    
+
     try {
       const res = await fetch("/api/verification/verify", {
         method: "POST",
@@ -530,41 +634,86 @@ export default function MiningJobResultsPage() {
           ...(getAuthHeaders() ?? {}),
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ emails: emailsToVerify })
+        body: JSON.stringify({ emails: emailsToVerify }),
       });
-      
+
       if (!res.ok) throw new Error("Verification failed");
-      
+
       alert(`Verification started for ${emailsToVerify.length} emails`);
-      
-      // Refresh results after a delay
+
+      // Refresh results after a short delay
       setTimeout(fetchResults, 3000);
     } catch (err) {
+      console.error("Error starting verification:", err);
       alert("Error starting verification");
     }
   };
 
   const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+
     if (!confirm(`Delete ${selectedIds.length} selected results?`)) return;
-    
+
     try {
       await Promise.all(
-        selectedIds.map(id =>
+        selectedIds.map((id) =>
           fetch(`/api/mining/results/${id}`, {
             method: "DELETE",
-            headers: getAuthHeaders(),
+            headers: getAuthHeaders() ?? {},
           })
         )
       );
-      
-      setResults(prev => prev.filter(r => !selectedIds.includes(r.id)));
+
+      setResults((prev) => prev.filter((r) => !selectedIds.includes(r.id)));
       setSelectedIds([]);
     } catch (err) {
+      console.error("Error deleting results:", err);
       alert("Error deleting results");
     }
   };
 
-  // Render
+  // Website helper: hem URL crash etmesin hem domain gösterelim
+  const formatWebsite = (website: string | null | undefined) => {
+    if (!website) return null;
+
+    let href = website.trim();
+    if (!href) return null;
+
+    if (!/^https?:\/\//i.test(href)) {
+      href = `https://${href}`;
+    }
+
+    try {
+      const url = new URL(href);
+      return { href: url.toString(), label: url.hostname };
+    } catch {
+      return { href, label: website };
+    }
+  };
+
+  // Geçersiz / eksik jobId ise erken çık
+  if (!jobId || !isValidUuid(jobId)) {
+    return (
+      <div className="flex flex-col gap-4 p-6">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.push("/mining/jobs")}
+            className="p-2 hover:bg-gray-100 rounded-lg"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <div>
+            <h1 className="text-xl font-semibold">Mining Results</h1>
+            <p className="text-sm text-gray-500">
+              Invalid or missing job ID in URL.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -591,7 +740,7 @@ export default function MiningJobResultsPage() {
             </p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <button
             onClick={fetchResults}
@@ -627,7 +776,9 @@ export default function MiningJobResultsPage() {
         </div>
         <div className="rounded-lg border bg-white p-3">
           <div className="text-xs text-gray-500">With Email</div>
-          <div className="mt-1 text-xl font-semibold text-green-600">{summary.with_email}</div>
+          <div className="mt-1 text-xl font-semibold text-green-600">
+            {summary.with_email}
+          </div>
         </div>
         <div className="rounded-lg border bg-white p-3">
           <div className="text-xs text-gray-500">Verified</div>
@@ -643,11 +794,15 @@ export default function MiningJobResultsPage() {
         </div>
         <div className="rounded-lg border bg-white p-3">
           <div className="text-xs text-gray-500">Reviewed</div>
-          <div className="mt-1 text-xl font-semibold text-blue-600">{summary.reviewed}</div>
+          <div className="mt-1 text-xl font-semibold text-blue-600">
+            {summary.reviewed}
+          </div>
         </div>
         <div className="rounded-lg border bg-white p-3">
           <div className="text-xs text-gray-500">Imported</div>
-          <div className="mt-1 text-xl font-semibold text-green-600">{summary.imported}</div>
+          <div className="mt-1 text-xl font-semibold text-green-600">
+            {summary.imported}
+          </div>
         </div>
       </div>
 
@@ -655,7 +810,9 @@ export default function MiningJobResultsPage() {
       <div className="rounded-lg border bg-white p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[200px]">
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Search</label>
+            <label className="text-xs font-medium text-gray-500 mb-1 block">
+              Search
+            </label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
@@ -667,7 +824,7 @@ export default function MiningJobResultsPage() {
               />
             </div>
           </div>
-          
+
           <select
             value={emailFilter}
             onChange={(e) => setEmailFilter(e.target.value as any)}
@@ -677,7 +834,7 @@ export default function MiningJobResultsPage() {
             <option value="with">With Email</option>
             <option value="without">Without Email</option>
           </select>
-          
+
           <select
             value={verificationFilter}
             onChange={(e) => setVerificationFilter(e.target.value as any)}
@@ -689,7 +846,7 @@ export default function MiningJobResultsPage() {
             <option value="invalid">Invalid</option>
             <option value="risky">Risky</option>
           </select>
-          
+
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
@@ -701,7 +858,7 @@ export default function MiningJobResultsPage() {
             <option value="imported">Imported</option>
             <option value="skipped">Skipped</option>
           </select>
-          
+
           <select
             value={countryFilter}
             onChange={(e) => setCountryFilter(e.target.value)}
@@ -716,7 +873,7 @@ export default function MiningJobResultsPage() {
                 </option>
               ))}
           </select>
-          
+
           <span className="text-sm text-gray-500">
             Showing {filteredResults.length} of {summary.total}
           </span>
@@ -727,7 +884,8 @@ export default function MiningJobResultsPage() {
       {selectedIds.length > 0 && (
         <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 flex items-center justify-between">
           <span className="text-sm font-medium text-blue-900">
-            {selectedIds.length} result{selectedIds.length > 1 ? "s" : ""} selected
+            {selectedIds.length} result
+            {selectedIds.length > 1 ? "s" : ""} selected
           </span>
           <div className="flex gap-2">
             {Object.keys(editedResults).length > 0 && (
@@ -779,7 +937,10 @@ export default function MiningJobResultsPage() {
                 <th className="px-3 py-3">
                   <input
                     type="checkbox"
-                    checked={selectedIds.length === paginatedResults.length && paginatedResults.length > 0}
+                    checked={
+                      selectedIds.length === paginatedResults.length &&
+                      paginatedResults.length > 0
+                    }
                     onChange={handleSelectAll}
                     className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
                   />
@@ -799,8 +960,11 @@ export default function MiningJobResultsPage() {
             <tbody className="divide-y divide-gray-100">
               {paginatedResults.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-gray-500">
-                    {filteredResults.length === 0 
+                  <td
+                    colSpan={11}
+                    className="px-3 py-8 text-center text-gray-500"
+                  >
+                    {filteredResults.length === 0
                       ? "No results match your filters"
                       : "No results on this page"}
                   </td>
@@ -809,7 +973,9 @@ export default function MiningJobResultsPage() {
                 paginatedResults.map((result) => {
                   const edited = editedResults[result.id];
                   const displayResult = { ...result, ...edited };
-                  
+
+                  const websiteInfo = formatWebsite(displayResult.website);
+
                   return (
                     <tr key={result.id} className="hover:bg-gray-50">
                       <td className="px-3 py-3">
@@ -823,17 +989,23 @@ export default function MiningJobResultsPage() {
                       <td className="px-3 py-3">
                         <EditableCell
                           value={displayResult.company_name}
-                          onSave={(value) => handleEditCell(result.id, "company_name", value)}
+                          onSave={(value) =>
+                            handleEditCell(result.id, "company_name", value)
+                          }
                         />
                       </td>
                       <td className="px-3 py-3">
                         <div>
                           <EditableCell
                             value={displayResult.contact_name}
-                            onSave={(value) => handleEditCell(result.id, "contact_name", value)}
+                            onSave={(value) =>
+                              handleEditCell(result.id, "contact_name", value)
+                            }
                           />
                           {displayResult.job_title && (
-                            <span className="text-xs text-gray-500">{displayResult.job_title}</span>
+                            <span className="text-xs text-gray-500">
+                              {displayResult.job_title}
+                            </span>
                           )}
                         </div>
                       </td>
@@ -856,20 +1028,22 @@ export default function MiningJobResultsPage() {
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        {displayResult.website ? (
+                        {websiteInfo ? (
                           <a
-                            href={displayResult.website}
+                            href={websiteInfo.href}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
                           >
                             <Globe className="h-3 w-3" />
-                            {new URL(displayResult.website).hostname}
+                            {websiteInfo.label}
                           </a>
                         ) : (
                           <EditableCell
                             value={null}
-                            onSave={(value) => handleEditCell(result.id, "website", value)}
+                            onSave={(value) =>
+                              handleEditCell(result.id, "website", value)
+                            }
                             type="url"
                           />
                         )}
@@ -878,7 +1052,9 @@ export default function MiningJobResultsPage() {
                         {displayResult.phone ? (
                           <div className="flex items-center gap-1">
                             <Phone className="h-3 w-3 text-gray-400" />
-                            <span className="text-sm">{displayResult.phone}</span>
+                            <span className="text-sm">
+                              {displayResult.phone}
+                            </span>
                           </div>
                         ) : (
                           <span className="text-gray-400">—</span>
@@ -895,17 +1071,28 @@ export default function MiningJobResultsPage() {
                         </div>
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <ConfidenceScore score={displayResult.confidence_score} />
+                        <ConfidenceScore
+                          score={displayResult.confidence_score}
+                        />
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <VerificationBadge status={displayResult.verification_status} />
+                        <VerificationBadge
+                          status={displayResult.verification_status}
+                        />
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full
-                          ${displayResult.status === "imported" ? "bg-green-100 text-green-800" :
-                            displayResult.status === "reviewed" ? "bg-blue-100 text-blue-800" :
-                            displayResult.status === "skipped" ? "bg-gray-100 text-gray-800" :
-                            "bg-yellow-100 text-yellow-800"}`}>
+                        <span
+                          className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full
+                          ${
+                            displayResult.status === "imported"
+                              ? "bg-green-100 text-green-800"
+                              : displayResult.status === "reviewed"
+                              ? "bg-blue-100 text-blue-800"
+                              : displayResult.status === "skipped"
+                              ? "bg-gray-100 text-gray-800"
+                              : "bg-yellow-100 text-yellow-800"
+                          }`}
+                        >
                           {displayResult.status}
                         </span>
                       </td>
@@ -924,6 +1111,7 @@ export default function MiningJobResultsPage() {
                           )}
                           <button
                             onClick={() => {
+                              if (displayResult.emails.length === 0) return;
                               navigator.clipboard.writeText(
                                 displayResult.emails.join(", ")
                               );
@@ -961,7 +1149,7 @@ export default function MiningJobResultsPage() {
             </span>
             <div className="flex gap-2">
               <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
                 className="px-3 py-1 text-sm border rounded hover:bg-white disabled:opacity-50"
               >
@@ -971,7 +1159,7 @@ export default function MiningJobResultsPage() {
                 Page {page} of {totalPages}
               </span>
               <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
                 className="px-3 py-1 text-sm border rounded hover:bg-white disabled:opacity-50"
               >
@@ -984,9 +1172,18 @@ export default function MiningJobResultsPage() {
 
       {/* Help Text */}
       <div className="text-xs text-gray-500">
-        <p>💡 Click on company names, contacts, or websites to edit them inline. Your changes will be highlighted and can be saved in bulk.</p>
-        <p>📧 Select results and click "Import to Leads" to move them to your leads database.</p>
-        <p>✅ Use "Verify Emails" to validate email addresses before importing (uses verification credits).</p>
+        <p>
+          💡 Click on company names, contacts, or websites to edit them
+          inline. Your changes will be highlighted and can be saved in bulk.
+        </p>
+        <p>
+          📧 Select results and click "Import to Leads" to move them to your
+          leads database.
+        </p>
+        <p>
+          ✅ Use "Verify Emails" to validate email addresses before importing
+          (uses verification credits).
+        </p>
       </div>
     </div>
   );

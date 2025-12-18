@@ -9,7 +9,6 @@ function isValidUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_REGEX.test(value);
 }
 
-// Bu dosyaya özel küçük proxy helper
 async function proxyRequest(
   req: Request,
   path: string
@@ -25,7 +24,7 @@ async function proxyRequest(
   const url = new URL(req.url);
   const targetUrl = new URL(path, BACKEND_URL);
 
-  // Query string'leri forward et (page, limit vs.)
+  // Query string'leri forward et
   targetUrl.search = url.search;
 
   const method = req.method;
@@ -50,7 +49,7 @@ async function proxyRequest(
   try {
     backendRes = await fetch(targetUrl.toString(), init);
   } catch (err) {
-    console.error("Failed to reach backend /api/mining/jobs/:id/results:", err);
+    console.error("Failed to reach backend /api/mining/jobs/:id/logs:", err);
     return NextResponse.json(
       { error: "Failed to connect to backend" },
       { status: 502 }
@@ -73,13 +72,13 @@ async function proxyRequest(
   }
 }
 
-// GET /api/mining/jobs/[id]/results → BACKEND_URL/api/mining/jobs/{id}/results
+// GET /api/mining/jobs/[id]/logs → BACKEND_URL/api/mining/jobs/{id}/logs
 export async function GET(request: any, context: any) {
   const rawId = context?.params?.id as string | string[] | undefined;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
   if (!id || !isValidUuid(id)) {
-    console.error("Invalid job id for results API:", id);
+    console.error("Invalid job id for logs API:", id);
     return NextResponse.json(
       {
         error: "Invalid job ID",
@@ -89,5 +88,5 @@ export async function GET(request: any, context: any) {
     );
   }
 
-  return proxyRequest(request as Request, `/api/mining/jobs/${id}/results`);
+  return proxyRequest(request as Request, `/api/mining/jobs/${id}/logs`);
 }
