@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL;
 
@@ -9,10 +9,39 @@ function isValidUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_REGEX.test(value);
 }
 
+function validateJobId(id: string): { valid: boolean; error?: string } {
+  if (!id) {
+    return { valid: false, error: "Job ID is required" };
+  }
+
+  if (id === "undefined" || id === "null") {
+    return { valid: false, error: `Invalid job ID: ${id}` };
+  }
+
+  if (!isValidUuid(id)) {
+    return { valid: false, error: "Job ID must be a valid UUID" };
+  }
+
+  return { valid: true };
+}
+
 async function proxyRequest(
-  req: Request,
-  path: string
+  req: NextRequest,
+  jobId: string,
+  pathSuffix: string = ""
 ): Promise<NextResponse> {
+  const validation = validateJobId(jobId);
+  if (!validation.valid) {
+    console.error("Invalid job id for logs API:", jobId);
+    return NextResponse.json(
+      {
+        error: validation.error,
+        details: `Received job ID: ${jobId}`,
+      },
+      { status: 400 }
+    );
+  }
+
   if (!BACKEND_URL) {
     console.error("BACKEND_URL is not defined");
     return NextResponse.json(
@@ -22,32 +51,31 @@ async function proxyRequest(
   }
 
   const url = new URL(req.url);
-  const targetUrl = new URL(path, BACKEND_URL);
-
-  // Query string'leri forward et
+  const targetPath = `/api/mining/jobs/${jobId}${pathSuffix}`;
+  const targetUrl = new URL(targetPath, BACKEND_URL);
   targetUrl.search = url.search;
 
-  const method = req.method;
-  const headers = new Headers();
+  const outgoingHeaders = new Headers();
+  const auth = req.headers.get("authorization");
+  const contentType = req.headers.get("content-type");
 
-  const incomingHeaders = req.headers;
-  const auth = incomingHeaders.get("authorization");
-  const contentType = incomingHeaders.get("content-type");
+  if (auth) outgoingHeaders.set("authorization", auth);
+  if (contentType) outgoingHeaders.set("content-type", contentType);
+  outgoingHeaders.set("accept", "application/json");
 
-  if (auth) headers.set("authorization", auth);
-  if (contentType) headers.set("content-type", contentType);
-  headers.set("accept", "application/json");
-
-  const init: RequestInit = {
-    method,
-    headers,
-    body:
-      method === "GET" || method === "HEAD" ? undefined : await req.text(),
-  };
+  const body =
+    req.method === "GET" || req.method === "HEAD" || req.method === "DELETE"
+      ? undefined
+      : await req.text();
 
   let backendRes: Response;
   try {
-    backendRes = await fetch(targetUrl.toString(), init);
+    backendRes = await fetch(targetUrl.toString(), {
+      method: req.method,
+      headers: outgoingHeaders,
+      body,
+      signal: AbortSignal.timeout(30000),
+    });
   } catch (err) {
     console.error("Failed to reach backend /api/mining/jobs/:id/logs:", err);
     return NextResponse.json(
@@ -72,21 +100,10 @@ async function proxyRequest(
   }
 }
 
-// GET /api/mining/jobs/[id]/logs → BACKEND_URL/api/mining/jobs/{id}/logs
-export async function GET(request: any, context: any) {
-  const rawId = context?.params?.id as string | string[] | undefined;
-  const id = Array.isArray(rawId) ? rawId[0] : rawId;
-
-  if (!id || !isValidUuid(id)) {
-    console.error("Invalid job id for logs API:", id);
-    return NextResponse.json(
-      {
-        error: "Invalid job ID",
-        details: `Job ID must be a valid UUID, received: ${String(id)}`,
-      },
-      { status: 400 }
-    );
-  }
-
-  return proxyRequest(request as Request, `/api/mining/jobs/${id}/logs`);
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const params = await context.params;
+  return proxyRequest(request, params.id, "/logs");
 }

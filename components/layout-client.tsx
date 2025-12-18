@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar"; // Import the new Sidebar
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { logoutClient } from "@/lib/auth";
 
 type Props = {
   children: React.ReactNode;
@@ -67,14 +68,10 @@ export function LayoutClient({ children }: Props) {
     return <>{children}</>;
   }
 
-  function handleLogout() {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("liffy_token");
-      localStorage.removeItem("liffy_user");
-      localStorage.removeItem("sidebar-collapsed");
-    }
+  const handleLogout = useCallback(async () => {
+    await logoutClient();
     router.push("/login");
-  }
+  }, [router]);
 
   // Get page title from pathname
   const getPageTitle = () => {

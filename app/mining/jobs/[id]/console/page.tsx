@@ -240,6 +240,8 @@ export default function MiningJobConsolePage() {
   // Fetch job details and logs
   const fetchData = useCallback(async () => {
     if (!jobId || !isValidUuid(jobId)) {
+      setError("Job not found or invalid job id.");
+      setLoading(false);
       return;
     }
 
@@ -253,21 +255,35 @@ export default function MiningJobConsolePage() {
       const jobRes = await fetch(`/api/mining/jobs/${jobId}`, {
         headers: authHeaders,
       });
+      const jobBody = await jobRes
+        .json()
+        .catch(() => ({ error: `Failed to parse job ${jobId}` }));
+
       if (!jobRes.ok) {
-        throw new Error(`Failed to fetch job: ${jobRes.status}`);
+        const message =
+          jobRes.status === 400 || jobRes.status === 404
+            ? "Job not found or invalid job id."
+            : jobBody?.error || `Failed to fetch job: ${jobRes.status}`;
+        throw new Error(message);
       }
-      const jobData = await jobRes.json();
-      setJob(jobData.job || jobData);
+      setJob(jobBody.job || jobBody);
 
       // Fetch logs
       const logsRes = await fetch(`/api/mining/jobs/${jobId}/logs`, {
         headers: authHeaders,
       });
+      const logsData = await logsRes
+        .json()
+        .catch(() => ({ error: `Failed to parse logs for ${jobId}` }));
+
       if (!logsRes.ok) {
-        throw new Error(`Failed to fetch logs: ${logsRes.status}`);
+        const message =
+          logsRes.status === 400
+            ? "Job not found or invalid job id."
+            : logsData?.error || `Failed to fetch logs: ${logsRes.status}`;
+        throw new Error(message);
       }
 
-      const logsData = await logsRes.json();
       const entries: LogEntry[] = Array.isArray(logsData)
         ? logsData
         : logsData.logs || [];
