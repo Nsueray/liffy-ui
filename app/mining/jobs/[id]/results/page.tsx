@@ -153,7 +153,7 @@ function VerificationBadge({ status }: { status?: string }) {
   );
 }
 
-function ConfidenceScore({ score }: { score?: number }) {
+function ConfidenceScore({ score }: { score?: number | null }) {
   if (score == null) return null;
 
   const color =
