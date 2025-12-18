@@ -68,12 +68,27 @@ export default function MiningJobDetailPage() {
         setLoading(true);
         setError(null);
 
+        // JWT token'ı client tarafında localStorage'dan oku
+        const token =
+          typeof window !== "undefined"
+            ? localStorage.getItem("liffy_token") ||
+              localStorage.getItem("auth_token") ||
+              localStorage.getItem("token")
+            : null;
+
+        const headers: Record<string, string> = {
+          Accept: "application/json",
+        };
+
+        // Token varsa Authorization header ekle
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+
         const res = await fetch(`/api/mining/jobs/${jobId}`, {
           method: "GET",
           signal: controller.signal,
-          headers: {
-            Accept: "application/json",
-          },
+          headers,
         });
 
         const data = await res.json().catch(() => null);
@@ -82,7 +97,9 @@ export default function MiningJobDetailPage() {
           const message =
             data?.error ||
             data?.message ||
-            `Failed to load job (HTTP ${res.status}).`;
+            (!token
+              ? "Missing auth token. Please log in again."
+              : `Failed to load job (HTTP ${res.status}).`);
           setError(message);
           setLoading(false);
           return;
