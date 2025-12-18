@@ -35,18 +35,18 @@ type MiningResult = {
   company_name: string | null;
   contact_name: string | null;
   job_title: string | null;
-  emails: string[]; // Array of emails
+  emails: string[];
   website: string | null;
   phone: string | null;
   country: string | null;
   city: string | null;
-  address?: string | null;
-  source_url?: string | null;
-  confidence_score?: number; // 0-100
-  verification_status?: "unverified" | "valid" | "invalid" | "risky";
+  address: string | null;
+  source_url: string | null;
+  confidence_score: number | null; // 0-100
+  verification_status: "unverified" | "valid" | "invalid" | "risky";
   status: "new" | "reviewed" | "imported" | "skipped";
   created_at: string;
-  updated_at?: string;
+  updated_at: string | null;
 };
 
 type JobSummary = {
@@ -87,11 +87,13 @@ const MOCK_RESULTS: MiningResult[] = [
     phone: "+234 803 456 7890",
     country: "Nigeria",
     city: "Lagos",
+    address: null,
     source_url: "https://exhibitors.big5constructnigeria.com/...",
     confidence_score: 95,
     verification_status: "valid",
     status: "new",
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   },
   {
     id: "2",
@@ -104,10 +106,13 @@ const MOCK_RESULTS: MiningResult[] = [
     phone: "+971 4 123 4567",
     country: "UAE",
     city: "Dubai",
+    address: null,
+    source_url: null,
     confidence_score: 88,
     verification_status: "unverified",
     status: "new",
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   },
 ];
 
@@ -264,7 +269,8 @@ export default function MiningJobResultsPage() {
   // Fetch data
   const fetchResults = useCallback(async () => {
     if (!jobId || !isValidUuid(jobId)) {
-      // Geçersiz veya eksik jobId varsa backend'e istek atma
+      setError("Job not found or invalid job id.");
+      setLoading(false);
       return;
     }
 
@@ -281,22 +287,37 @@ export default function MiningJobResultsPage() {
       if (jobRes.ok) {
         const jobData = await jobRes.json();
         setJob(jobData.job || jobData);
+      } else if (jobRes.status === 400 || jobRes.status === 404) {
+        const message =
+          "Job not found or invalid job id. Please check the link and try again.";
+        setError(message);
+        setLoading(false);
+        return;
       }
 
       // Fetch results
       const res = await fetch(`/api/mining/jobs/${jobId}/results`, {
         headers: authHeaders,
       });
+
+      const data = await res
+        .json()
+        .catch(() => ({ error: `Failed to parse results for ${jobId}` }));
+
       if (!res.ok) {
-        throw new Error(`Failed to fetch results: ${res.status}`);
+        const message =
+          res.status === 400
+            ? "Job not found or invalid job id."
+            : data?.error || `Failed to fetch results: ${res.status}`;
+        throw new Error(message);
       }
 
-      const data = await res.json();
       const items: any[] = data.results || data.items || data || [];
 
       // Transform data if needed (handle backward compatibility)
       const transformedResults: MiningResult[] = items.map((item: any) => ({
         ...item,
+        job_id: item.job_id || item.jobId || jobId,
         emails: Array.isArray(item.emails)
           ? item.emails
           : item.email
@@ -304,8 +325,20 @@ export default function MiningJobResultsPage() {
           : [],
         company_name:
           item.company_name || item.companyName || item.company || null,
+        contact_name: item.contact_name || item.contactName || null,
+        job_title: item.job_title || item.jobTitle || null,
+        website: item.website || null,
+        phone: item.phone || null,
+        country: item.country || null,
+        city: item.city || null,
+        address: item.address ?? null,
+        source_url: item.source_url || item.sourceUrl || null,
+        confidence_score:
+          item.confidence_score ?? item.confidenceScore ?? null,
         verification_status: item.verification_status || "unverified",
         status: item.status || "new",
+        created_at: item.created_at || item.createdAt || new Date().toISOString(),
+        updated_at: item.updated_at || item.updatedAt || null,
       }));
 
       setResults(transformedResults);

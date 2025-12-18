@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -31,6 +31,7 @@ import {
   Mail,
   Activity,
 } from "lucide-react";
+import { logoutClient } from "@/lib/auth";
 
 // Menu configuration with icons
 const menuItems = [
@@ -102,6 +103,7 @@ interface SidebarProps {
 
 export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [mounted, setMounted] = useState(false);
   
@@ -133,6 +135,11 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
     
     return () => clearInterval(interval);
   }, []);
+
+  const handleLogout = async () => {
+    await logoutClient();
+    router.push("/login");
+  };
 
   const toggleCollapsed = () => {
     const newState = !collapsed;
@@ -370,21 +377,20 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
           {/* Logout Button */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Link href="/logout">
-                <Button
-                  variant="ghost"
-                  className={cn(
-                    "w-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20",
-                    collapsed ? "px-2" : "justify-start"
-                  )}
-                >
-                  <LogOut className={cn(
-                    "h-4 w-4",
-                    collapsed ? "" : "mr-3"
-                  )} />
-                  {!collapsed && <span>Logout</span>}
-                </Button>
-              </Link>
+              <Button
+                onClick={handleLogout}
+                variant="ghost"
+                className={cn(
+                  "w-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20",
+                  collapsed ? "px-2" : "justify-start"
+                )}
+              >
+                <LogOut className={cn(
+                  "h-4 w-4",
+                  collapsed ? "" : "mr-3"
+                )} />
+                {!collapsed && <span>Logout</span>}
+              </Button>
             </TooltipTrigger>
             {collapsed && (
               <TooltipContent side="right">
