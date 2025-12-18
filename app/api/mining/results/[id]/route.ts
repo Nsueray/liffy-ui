@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL;
 
@@ -65,13 +65,19 @@ async function proxyRequest(
 }
 
 // PATCH /api/mining/results/[id]
-export async function PATCH(request: any, context: any) {
-  const id = context?.params?.id;
-  return proxyRequest(request as Request, `/api/mining/results/${id}`);
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const params = await context.params;
+  return proxyRequest(request as Request, `/api/mining/results/${params.id}`);
 }
 
 // DELETE /api/mining/results/[id]
-export async function DELETE(request: any, context: any) {
-  const id = context?.params?.id;
-  return proxyRequest(request as Request, `/api/mining/results/${id}`);
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const params = await context.params;
+  return proxyRequest(request as Request, `/api/mining/results/${params.id}`);
 }
