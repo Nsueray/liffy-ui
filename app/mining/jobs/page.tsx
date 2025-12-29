@@ -24,11 +24,7 @@ import {
 import { toast } from "react-hot-toast";
 import { getAuthHeaders } from "@/lib/auth";
 
-// Import the RetryJobButton component
-// Assuming you have this component in your components folder
-// import { RetryJobButton } from "@/components/mining/retry-job-button";
-
-// For now, include it inline (you can move this to a separate file)
+// Import the RetryJobButton component or keep inline
 function RetryJobButton({
   jobId,
   jobName,
@@ -64,15 +60,16 @@ function RetryJobButton({
 
       const data = await response.json();
       
-      toast.success(`Job retry created! Redirecting to console...`);
+      toast.success(`Job retry created! Redirecting...`);
       
       if (onRetryComplete) {
         onRetryComplete();
       }
       
-      // Redirect to the new job's console
+      // Redirect to the new job's results (or list)
       setTimeout(() => {
-        router.push(`/mining/jobs/${data.new_job_id}/console`);
+        // Since console is removed, maybe go to results or stay
+        router.refresh();
       }, 1500);
       
     } catch (err) {
@@ -170,9 +167,9 @@ function useMiningJobs(page: number, search: string, statusFilter: MiningJobStat
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
-      // Use mock data in case of error (for development)
-      setJobs(MOCK_JOBS);
-      setTotalCount(MOCK_JOBS.length);
+      // Fallback empty
+      setJobs([]); 
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
@@ -193,57 +190,6 @@ function useMiningJobs(page: number, search: string, statusFilter: MiningJobStat
 
   return { jobs, loading, error, totalCount, stats, refetch: fetchJobs };
 }
-
-// Mock data for development
-const MOCK_JOBS: MiningJob[] = [
-  {
-    id: "bd4fccb0-00e7-4992-a355-95189bb580c2",
-    organizer_id: "org_1",
-    name: "Big5 Nigeria Exhibitors",
-    type: "url",
-    input: "https://exhibitors.big5constructnigeria.com/...",
-    strategy: "playwright",
-    site_profile: "big5",
-    status: "completed",
-    total_found: 172,
-    total_emails_raw: 173,
-    total_prospects_created: 168,
-    created_at: "2025-11-24T10:00:00Z",
-    completed_at: "2025-11-24T10:09:42Z",
-    updated_at: "2025-11-24T10:09:42Z"
-  },
-  {
-    id: "job_2",
-    organizer_id: "org_1",
-    name: "Dubai HVAC Dealers",
-    type: "url",
-    input: "https://maps.google.com/search/hvac+dubai",
-    strategy: "playwright",
-    status: "running",
-    progress: 45,
-    total_found: 89,
-    total_emails_raw: 67,
-    total_prospects_created: 0,
-    created_at: "2025-11-25T08:00:00Z",
-    started_at: "2025-11-25T08:01:00Z",
-    updated_at: "2025-11-25T08:15:00Z"
-  },
-  {
-    id: "job_3",
-    organizer_id: "org_1",
-    name: "Istanbul Architects List",
-    type: "file",
-    input: "architects.csv",
-    strategy: "http",
-    status: "failed",
-    error: "Connection timeout",
-    total_found: 0,
-    total_emails_raw: 0,
-    total_prospects_created: 0,
-    created_at: "2025-11-25T09:30:00Z",
-    updated_at: "2025-11-25T09:30:00Z"
-  }
-];
 
 // Components
 function StatusBadge({ status }: { status: MiningJobStatus }) {
@@ -399,6 +345,24 @@ export default function MiningJobsPage() {
       toast.success(`${selectedJobs.length} jobs deleted`);
     } catch (err) {
       toast.error("Error deleting jobs");
+    }
+  };
+
+  const handleSingleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this job?")) return;
+    
+    try {
+      const res = await fetch(`/api/mining/jobs/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      
+      if (!res.ok) throw new Error("Failed");
+      
+      refetch();
+      toast.success("Job deleted");
+    } catch (err) {
+      toast.error("Error deleting job");
     }
   };
 
@@ -599,7 +563,7 @@ export default function MiningJobsPage() {
                     <td className="px-4 py-3">
                       <div className="flex flex-col">
                         <Link 
-                          href={`/mining/jobs/${job.id}`}
+                          href={`/mining/jobs/${job.id}/results`}
                           className="font-medium text-gray-900 hover:text-orange-600"
                         >
                           {job.name}
@@ -662,13 +626,7 @@ export default function MiningJobsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex justify-end gap-1">
-                        <Link
-                          href={`/mining/jobs/${job.id}/console`}
-                          className="px-2 py-1 text-xs border rounded hover:bg-gray-50"
-                        >
-                          Console
-                        </Link>
+                      <div className="flex justify-end gap-2 items-center">
                         {job.status === "completed" && (
                           <Link
                             href={`/mining/jobs/${job.id}/results`}
@@ -684,6 +642,13 @@ export default function MiningJobsPage() {
                             onRetryComplete={refetch}
                           />
                         )}
+                        <button
+                          onClick={() => handleSingleDelete(job.id)}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                          title="Delete Job"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
