@@ -532,37 +532,55 @@ export default function MiningJobResultsPage() {
     }
   };
 
+  /* ======================================================
+     🔥 UPDATED IMPORT LOGIC - Email olmayan skip, verification opsiyonel
+     ====================================================== */
   const handleImportToLeads = async () => {
     if (!jobId || !isValidUuid(jobId)) {
       alert("Geçersiz job ID – lütfen Mining Jobs sayfasından tekrar deneyin.");
       return;
     }
 
-    const selectedResults = results.filter((r) =>
-      selectedIds.includes(r.id)
-    );
+    const selected = results.filter((r) => selectedIds.includes(r.id));
 
-    if (selectedResults.length === 0) {
-      alert("Please select results to import");
+    if (selected.length === 0) {
+      alert("Please select results to import.");
       return;
     }
 
-    // Check if emails are verified
-    const unverifiedCount = selectedResults.filter(
-      (r) => r.verification_status !== "valid"
-    ).length;
+    // 🟡 Email olanları ve olmayanları ayır
+    const withEmail = selected.filter((r) => r.emails.length > 0);
+    const withoutEmail = selected.filter((r) => r.emails.length === 0);
 
-    if (unverifiedCount > 0) {
-      if (
-        !confirm(
-          `${unverifiedCount} results are not verified. Continue importing?`
-        )
-      ) {
+    // 🟡 INFO: email olmayanlar skip edilecek
+    if (withoutEmail.length > 0) {
+      alert(
+        `${withoutEmail.length} selected result(s) do not have an email and will be skipped.`
+      );
+    }
+
+    if (withEmail.length === 0) {
+      alert("No results with email to import.");
+      return;
+    }
+
+    // 🟡 OPTIONAL verification (non-blocking)
+    const unverified = withEmail.filter(
+      (r) => r.verification_status !== "valid"
+    );
+
+    if (unverified.length > 0) {
+      const choice = confirm(
+        `${unverified.length} email(s) are not verified.\n\nPress OK to continue without verification.\nPress Cancel if you want to verify first.`
+      );
+
+      if (!choice) {
         return;
       }
     }
 
     try {
+      // 🔵 IMPORT - Doğrudan lead objesi gönder
       const res = await fetch("/api/leads/import", {
         method: "POST",
         headers: {
@@ -570,29 +588,54 @@ export default function MiningJobResultsPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          job_id: jobId,
-          result_ids: selectedIds,
+          leads: withEmail.map((r) => ({
+            email: r.emails[0],
+            name: r.contact_name,
+            company: r.company_name,
+            country: r.country,
+            source_type: "mining",
+            source_ref: jobId,
+            verification_status: r.verification_status,
+            meta: {
+              id: r.id,
+              job_id: r.job_id,
+              job_title: r.job_title,
+              emails: r.emails,
+              website: r.website,
+              phone: r.phone,
+              city: r.city,
+              address: r.address,
+              source_url: r.source_url,
+              confidence_score: r.confidence_score,
+            },
+          })),
         }),
       });
 
-      if (!res.ok) throw new Error("Import failed");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData?.error || "Import failed");
+      }
 
       const data = await res.json();
-      alert(`Successfully imported ${data.imported} leads`);
 
-      // Update status
+      // 🟢 UI STATUS UPDATE - Sadece email olanları imported yap
       setResults((prev) =>
         prev.map((r) =>
-          selectedIds.includes(r.id)
-            ? ({ ...r, status: "imported" } as MiningResult)
+          selectedIds.includes(r.id) && r.emails.length > 0
+            ? { ...r, status: "imported" as const }
             : r
         )
+      );
+
+      alert(
+        `✅ Imported ${withEmail.length} lead(s) successfully.\n${withoutEmail.length > 0 ? `⚠️ ${withoutEmail.length} result(s) without email were skipped.` : ""}`
       );
 
       setSelectedIds([]);
     } catch (err) {
       console.error("Error importing to leads:", err);
-      alert("Error importing to leads");
+      alert(err instanceof Error ? err.message : "Error importing to leads");
     }
   };
 
