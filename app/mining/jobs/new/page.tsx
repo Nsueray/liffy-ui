@@ -6,8 +6,11 @@ import Link from "next/link";
 import { ChevronLeft, Globe, FileText, UploadCloud, FileType } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { getAuthHeaders } from "@/lib/auth";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 export default function NewMiningJobPage() {
+  useAuthGuard();
+
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [jobType, setJobType] = useState<"url" | "file">("url");

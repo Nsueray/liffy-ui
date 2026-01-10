@@ -25,6 +25,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -228,6 +229,8 @@ function EditableCell({
 }
 
 export default function MiningJobResultsPage() {
+  useAuthGuard();
+
   const router = useRouter();
   const params = useParams();
   const rawId = params?.id;
