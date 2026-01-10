@@ -265,6 +265,7 @@ export default function MiningJobResultsPage() {
   // Pagination
   const [page, setPage] = useState(1);
   const ITEMS_PER_PAGE = 50;
+  const [totalFromServer, setTotalFromServer] = useState(0);
 
   // Fetch data
   const fetchResults = useCallback(async () => {
@@ -295,8 +296,8 @@ export default function MiningJobResultsPage() {
         return;
       }
 
-      // Fetch results
-      const res = await fetch(`/api/mining/jobs/${jobId}/results`, {
+      // Fetch results with server-side pagination
+      const res = await fetch(`/api/mining/jobs/${jobId}/results?page=${page}&limit=${ITEMS_PER_PAGE}`, {
         headers: authHeaders,
       });
 
@@ -313,6 +314,13 @@ export default function MiningJobResultsPage() {
       }
 
       const items: any[] = data.results || data.items || data || [];
+
+      // Set total from server pagination
+      if (data.pagination?.total !== undefined) {
+        setTotalFromServer(data.pagination.total);
+      } else {
+        setTotalFromServer(items.length);
+      }
 
       // Transform data if needed (handle backward compatibility)
       const transformedResults: MiningResult[] = items.map((item: any) => ({
@@ -351,11 +359,12 @@ export default function MiningJobResultsPage() {
       // Sadece development ortamında mock data göster
       if (isDev) {
         setResults(MOCK_RESULTS);
+        setTotalFromServer(MOCK_RESULTS.length);
       }
     } finally {
       setLoading(false);
     }
-  }, [jobId]);
+  }, [jobId, page]);
 
   useEffect(() => {
     fetchResults();
@@ -366,7 +375,7 @@ export default function MiningJobResultsPage() {
     setPage(1);
   }, [search, emailFilter, statusFilter, verificationFilter, countryFilter]);
 
-  // Calculate summary
+  // Calculate summary from current page results
   const summary = useMemo((): Summary => {
     const total = results.length;
     const withEmail = results.filter((r) => r.emails.length > 0).length;
@@ -406,7 +415,7 @@ export default function MiningJobResultsPage() {
     };
   }, [results]);
 
-  // Filter results
+  // Filter results (client-side filtering on current page)
   const filteredResults = useMemo(() => {
     return results.filter((r) => {
       // Email filter
@@ -456,17 +465,13 @@ export default function MiningJobResultsPage() {
     search,
   ]);
 
-  // Paginated results
-  const paginatedResults = useMemo(() => {
-    const start = (page - 1) * ITEMS_PER_PAGE;
-    const end = start + ITEMS_PER_PAGE;
-    return filteredResults.slice(start, end);
-  }, [filteredResults, page]);
+  // Server handles pagination - no client-side slice needed
+  const paginatedResults = filteredResults;
 
-  const totalPages =
-    filteredResults.length === 0
-      ? 1
-      : Math.ceil(filteredResults.length / ITEMS_PER_PAGE);
+  // Total pages from server
+  const totalPages = totalFromServer === 0
+    ? 1
+    : Math.ceil(totalFromServer / ITEMS_PER_PAGE);
 
   // Actions
   const handleSelectAll = () => {
@@ -812,7 +817,7 @@ export default function MiningJobResultsPage() {
           <div>
             <h1 className="text-2xl font-semibold">Mining Results Review</h1>
             <p className="text-sm text-gray-500">
-              {job?.name || `Job ${jobId}`} • {summary.total} results found
+              {job?.name || `Job ${jobId}`} • {totalFromServer} results found
             </p>
           </div>
         </div>
@@ -848,7 +853,7 @@ export default function MiningJobResultsPage() {
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <div className="rounded-lg border bg-white p-3">
           <div className="text-xs text-gray-500">Total Results</div>
-          <div className="mt-1 text-xl font-semibold">{summary.total}</div>
+          <div className="mt-1 text-xl font-semibold">{totalFromServer}</div>
         </div>
         <div className="rounded-lg border bg-white p-3">
           <div className="text-xs text-gray-500">With Email</div>
@@ -951,7 +956,7 @@ export default function MiningJobResultsPage() {
           </select>
 
           <span className="text-sm text-gray-500">
-            Showing {filteredResults.length} of {summary.total}
+            Showing {paginatedResults.length} of {totalFromServer}
           </span>
         </div>
       </div>
@@ -1217,10 +1222,10 @@ export default function MiningJobResultsPage() {
               </span>{" "}
               to{" "}
               <span className="font-medium">
-                {Math.min(page * ITEMS_PER_PAGE, filteredResults.length)}
+                {Math.min(page * ITEMS_PER_PAGE, totalFromServer)}
               </span>{" "}
               of{" "}
-              <span className="font-medium">{filteredResults.length}</span>{" "}
+              <span className="font-medium">{totalFromServer}</span>{" "}
               results
             </span>
             <div className="flex gap-2">
