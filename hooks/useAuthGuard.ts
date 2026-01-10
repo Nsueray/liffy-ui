@@ -1,19 +1,24 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-
-import { getAuthHeaders } from "@/lib/auth";
+import { useRouter, usePathname } from "next/navigation";
 
 export function useAuthGuard() {
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
-    const headers = getAuthHeaders();
+    if (typeof window === "undefined") return;
 
-    if (!headers) {
-      router.replace("/login");
-      return;
-    }
-  }, [router]);
+    // Login sayfasında guard çalışmaz
+    if (pathname === "/login") return;
+
+    // İlk render yarışını engelle
+    setTimeout(() => {
+      const token = localStorage.getItem("liffy_token");
+      if (!token) {
+        window.location.href = "/login";
+      }
+    }, 0);
+  }, [router, pathname]);
 }

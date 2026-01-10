@@ -24,6 +24,7 @@ export async function logoutClient() {
       localStorage.removeItem("liffy_token");
       localStorage.removeItem("liffy_user");
       localStorage.removeItem("sidebar-collapsed");
+      window.location.href = "/login";
     }
   }
 }
