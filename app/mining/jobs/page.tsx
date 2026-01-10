@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { getAuthHeaders } from "@/lib/auth";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 // Import the RetryJobButton component or keep inline
 function RetryJobButton({
@@ -273,6 +274,8 @@ function EmptyState({ statusFilter }: { statusFilter: string }) {
 }
 
 export default function MiningJobsPage() {
+  useAuthGuard();
+
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<MiningJobStatus | "all">("all");

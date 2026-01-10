@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 type MiningJob = {
   id: string;
@@ -33,6 +34,8 @@ function isValidUuid(id: string | undefined): id is string {
 }
 
 export default function MiningJobDetailPage() {
+  useAuthGuard();
+
   const params = useParams<{ id?: string }>();
   const router = useRouter();
 
