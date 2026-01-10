@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -56,7 +54,7 @@ export default function LoginPage() {
       }
 
       // Başarılı login → Mining Jobs sayfasına yönlendir
-      router.push("/mining/jobs");
+      window.location.href = "/mining/jobs";
     } catch (err) {
       console.error("Login error:", err);
       setError("Unexpected error while logging in");

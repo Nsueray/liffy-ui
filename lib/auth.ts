@@ -1,13 +1,16 @@
-export function getAuthHeaders(): HeadersInit | undefined {
-  if (typeof window === "undefined") return undefined;
+export function getAuthHeaders(): HeadersInit {
+  if (typeof window === "undefined") return {};
 
-  const token = localStorage.getItem("liffy_token");
+  try {
+    const token = localStorage.getItem("liffy_token");
+    if (!token) return {};
 
-  if (!token) return undefined;
-
-  return {
-    Authorization: `Bearer ${token}`,
-  };
+    return {
+      Authorization: `Bearer ${token}`,
+    };
+  } catch {
+    return {};
+  }
 }
 
 export async function logoutClient() {
