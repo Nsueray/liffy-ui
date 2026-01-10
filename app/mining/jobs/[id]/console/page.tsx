@@ -30,6 +30,7 @@ import {
   Database,
 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 // Types matching backend schema
 type MiningJobStatus =
@@ -169,6 +170,8 @@ function StatCard({ label, value, icon: Icon, trend }: any) {
 }
 
 export default function MiningJobConsolePage() {
+  useAuthGuard();
+
   const router = useRouter();
   const params = useParams();
   const rawId = params?.id;
