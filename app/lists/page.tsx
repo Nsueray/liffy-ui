@@ -18,10 +18,6 @@ interface List {
   unverified_count: number;
 }
 
-interface ListsResponse {
-  lists: List[];
-}
-
 export default function ListsPage() {
   useAuthGuard();
   const router = useRouter();
@@ -55,10 +51,25 @@ export default function ListsPage() {
 
       if (!res.ok) throw new Error('Failed to fetch lists');
 
-      const data: ListsResponse = await res.json();
-      setLists(data.lists);
+      const data = await res.json();
+      
+      // Safely handle response
+      const listsArray = Array.isArray(data.lists) ? data.lists : [];
+      
+      // Normalize data with defaults
+      const normalizedLists = listsArray.map((item: any) => ({
+        id: item.id || '',
+        name: item.name || 'Unnamed List',
+        created_at: item.created_at || new Date().toISOString(),
+        total_leads: Number(item.total_leads) || 0,
+        verified_count: Number(item.verified_count) || 0,
+        unverified_count: Number(item.unverified_count) || 0
+      }));
+      
+      setLists(normalizedLists);
     } catch (e: any) {
       setError(e.message);
+      setLists([]);
     } finally {
       setLoading(false);
     }
@@ -94,8 +105,19 @@ export default function ListsPage() {
         throw new Error(data.error || 'Failed to create list');
       }
 
-      const newList: List = await res.json();
-      setLists(prev => [newList, ...prev]);
+      const newList = await res.json();
+      
+      // Normalize the new list
+      const normalizedNewList: List = {
+        id: newList.id || '',
+        name: newList.name || newListName.trim(),
+        created_at: newList.created_at || new Date().toISOString(),
+        total_leads: Number(newList.total_leads) || 0,
+        verified_count: Number(newList.verified_count) || 0,
+        unverified_count: Number(newList.unverified_count) || 0
+      };
+      
+      setLists(prev => [normalizedNewList, ...prev]);
       setShowCreateModal(false);
       setNewListName('');
     } catch (e: any) {
@@ -133,6 +155,20 @@ export default function ListsPage() {
 
   const handleRowClick = (listId: string) => {
     router.push(`/lists/${listId}`);
+  };
+
+  const formatNumber = (num: number | undefined | null): string => {
+    if (num === undefined || num === null || isNaN(num)) return '0';
+    return num.toLocaleString();
+  };
+
+  const formatDate = (dateStr: string | undefined | null): string => {
+    if (!dateStr) return '-';
+    try {
+      return new Date(dateStr).toLocaleDateString();
+    } catch {
+      return '-';
+    }
   };
 
   return (
@@ -221,18 +257,18 @@ export default function ListsPage() {
                 >
                   <TableCell className="font-medium">{list.name}</TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{list.total_leads.toLocaleString()}</Badge>
+                    <Badge variant="secondary">{formatNumber(list.total_leads)}</Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant="default" className="bg-green-600 hover:bg-green-600">
-                      {list.verified_count.toLocaleString()}
+                      {formatNumber(list.verified_count)}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{list.unverified_count.toLocaleString()}</Badge>
+                    <Badge variant="outline">{formatNumber(list.unverified_count)}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {new Date(list.created_at).toLocaleDateString()}
+                    {formatDate(list.created_at)}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
@@ -336,7 +372,7 @@ export default function ListsPage() {
             <h2 className="text-lg font-semibold mb-2">Delete List</h2>
             <p className="text-muted-foreground mb-4">
               Are you sure you want to delete <strong>{deleteTarget.name}</strong>? 
-              This will also remove all {deleteTarget.total_leads.toLocaleString()} leads from this list. 
+              This will also remove all {formatNumber(deleteTarget.total_leads)} leads from this list. 
               This action cannot be undone.
             </p>
 
