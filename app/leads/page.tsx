@@ -16,6 +16,7 @@ interface Lead {
   verification_status: string;
   source_type: string | null;
   source_ref: string | null;
+  tags: string[];
   created_at: string;
 }
 
@@ -49,6 +50,11 @@ export default function LeadsPage() {
   const [verificationStatus, setVerificationStatus] = useState('');
   const [country, setCountry] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Tag editing state
+  const [editingTagsId, setEditingTagsId] = useState<string | null>(null);
+  const [editingTagsValue, setEditingTagsValue] = useState('');
+  const [savingTags, setSavingTags] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
@@ -84,7 +90,10 @@ export default function LeadsPage() {
       if (!res.ok) throw new Error('Failed to fetch leads');
 
       const data: LeadsResponse = await res.json();
-      setLeads(data.leads);
+      setLeads(data.leads.map(l => ({
+        ...l,
+        tags: Array.isArray(l.tags) ? l.tags : []
+      })));
       setTotal(data.total);
     } catch (e: any) {
       setError(e.message);
@@ -96,6 +105,52 @@ export default function LeadsPage() {
   useEffect(() => {
     fetchLeads();
   }, [fetchLeads]);
+
+  const handleStartEditTags = (lead: Lead) => {
+    setEditingTagsId(lead.id);
+    setEditingTagsValue(lead.tags.join(', '));
+  };
+
+  const handleCancelEditTags = () => {
+    setEditingTagsId(null);
+    setEditingTagsValue('');
+  };
+
+  const handleSaveTags = async (leadId: string) => {
+    setSavingTags(true);
+
+    try {
+      const token = localStorage.getItem('liffy_token');
+      const tags = editingTagsValue
+        .split(',')
+        .map(t => t.trim())
+        .filter(t => t.length > 0);
+
+      const res = await fetch(`/api/leads/${leadId}/tags`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ tags })
+      });
+
+      if (!res.ok) throw new Error('Failed to save tags');
+
+      const data = await res.json();
+      
+      setLeads(prev => prev.map(l => 
+        l.id === leadId ? { ...l, tags: data.tags || [] } : l
+      ));
+      
+      setEditingTagsId(null);
+      setEditingTagsValue('');
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSavingTags(false);
+    }
+  };
 
   const totalPages = Math.ceil(total / limit);
   const hasActiveFilters = search || verificationStatus || country;
@@ -147,7 +202,6 @@ export default function LeadsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Leads</h1>
@@ -157,11 +211,9 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {/* Filters */}
       <Card>
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            {/* Search */}
             <div className="md:col-span-2">
               <Input
                 placeholder="Search email, name, company..."
@@ -170,7 +222,6 @@ export default function LeadsPage() {
               />
             </div>
 
-            {/* Verification Status - Native Select */}
             <select
               value={verificationStatus}
               onChange={e => setVerificationStatus(e.target.value)}
@@ -183,14 +234,12 @@ export default function LeadsPage() {
               ))}
             </select>
 
-            {/* Country */}
             <Input
               placeholder="Filter by country..."
               value={country}
               onChange={e => setCountry(e.target.value)}
             />
 
-            {/* Clear Filters */}
             <Button
               variant="outline"
               onClick={clearFilters}
@@ -202,7 +251,6 @@ export default function LeadsPage() {
         </CardContent>
       </Card>
 
-      {/* Error State */}
       {error && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-6">
@@ -216,7 +264,6 @@ export default function LeadsPage() {
         </Card>
       )}
 
-      {/* Loading State */}
       {loading && (
         <Card>
           <CardContent className="py-12">
@@ -228,7 +275,6 @@ export default function LeadsPage() {
         </Card>
       )}
 
-      {/* Empty State */}
       {!loading && !error && leads.length === 0 && (
         <Card>
           <CardContent className="py-12">
@@ -254,7 +300,6 @@ export default function LeadsPage() {
         </Card>
       )}
 
-      {/* Table */}
       {!loading && !error && leads.length > 0 && (
         <>
           <Card>
@@ -266,6 +311,7 @@ export default function LeadsPage() {
                   <TableHead>Company</TableHead>
                   <TableHead>Country</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Tags</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Created</TableHead>
                 </TableRow>
@@ -273,6 +319,8 @@ export default function LeadsPage() {
               <TableBody>
                 {leads.map(lead => {
                   const source = formatSource(lead.source_type, lead.source_ref);
+                  const isEditingTags = editingTagsId === lead.id;
+                  
                   return (
                     <TableRow key={lead.id}>
                       <TableCell className="font-medium">{lead.email}</TableCell>
@@ -283,6 +331,59 @@ export default function LeadsPage() {
                         <Badge variant={getStatusVariant(lead.verification_status)}>
                           {lead.verification_status}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {isEditingTags ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              value={editingTagsValue}
+                              onChange={e => setEditingTagsValue(e.target.value)}
+                              placeholder="tag1, tag2"
+                              className="h-7 text-xs w-32"
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') handleSaveTags(lead.id);
+                                if (e.key === 'Escape') handleCancelEditTags();
+                              }}
+                              autoFocus
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => handleSaveTags(lead.id)}
+                              disabled={savingTags}
+                            >
+                              ✓
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-xs"
+                              onClick={handleCancelEditTags}
+                              disabled={savingTags}
+                            >
+                              ✕
+                            </Button>
+                          </div>
+                        ) : (
+                          <div 
+                            className="flex flex-wrap gap-1 cursor-pointer min-h-[24px] items-center"
+                            onClick={() => handleStartEditTags(lead)}
+                            title="Click to edit tags"
+                          >
+                            {lead.tags.length > 0 ? (
+                              lead.tags.map((tag, i) => (
+                                <Badge key={i} variant="outline" className="text-xs">
+                                  {tag}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-xs text-muted-foreground hover:text-foreground">
+                                + Add tags
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -304,7 +405,6 @@ export default function LeadsPage() {
             </Table>
           </Card>
 
-          {/* Pagination */}
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
               Showing {startRecord.toLocaleString()} - {endRecord.toLocaleString()} of {total.toLocaleString()} leads

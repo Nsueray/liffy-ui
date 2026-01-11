@@ -26,13 +26,21 @@ export default function ListsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Create modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newListName, setNewListName] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [countriesInput, setCountriesInput] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
+  const [emailOnly, setEmailOnly] = useState(true);
+  const [previewCount, setPreviewCount] = useState<number | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  // Delete confirmation state
+  // Available tags from leads
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+
   const [deleteTarget, setDeleteTarget] = useState<List | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -42,21 +50,15 @@ export default function ListsPage() {
 
     try {
       const token = localStorage.getItem('liffy_token');
-
       const res = await fetch('/api/lists', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       if (!res.ok) throw new Error('Failed to fetch lists');
 
       const data = await res.json();
-      
-      // Safely handle response
       const listsArray = Array.isArray(data.lists) ? data.lists : [];
       
-      // Normalize data with defaults
       const normalizedLists = listsArray.map((item: any) => ({
         id: item.id || '',
         name: item.name || 'Unnamed List',
@@ -75,13 +77,74 @@ export default function ListsPage() {
     }
   }, []);
 
+  const fetchAvailableTags = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('liffy_token');
+      const res = await fetch('/api/lists/tags', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableTags(data.tags || []);
+      }
+    } catch (e) {
+      // Silently fail - tags are optional
+    }
+  }, []);
+
   useEffect(() => {
     fetchLists();
-  }, [fetchLists]);
+    fetchAvailableTags();
+  }, [fetchLists, fetchAvailableTags]);
+
+  const parseCommaSeparated = (input: string): string[] => {
+    return input.split(',').map(s => s.trim()).filter(s => s.length > 0);
+  };
+
+  const getFilters = () => ({
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+    countries: parseCommaSeparated(countriesInput),
+    tags: parseCommaSeparated(tagsInput),
+    email_only: emailOnly
+  });
+
+  const handlePreview = async () => {
+    setPreviewLoading(true);
+    setCreateError(null);
+    setPreviewCount(null);
+
+    try {
+      const token = localStorage.getItem('liffy_token');
+      const res = await fetch('/api/lists/preview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(getFilters())
+      });
+
+      if (!res.ok) throw new Error('Failed to preview');
+
+      const data = await res.json();
+      setPreviewCount(data.count);
+    } catch (e: any) {
+      setCreateError(e.message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const handleCreate = async () => {
     if (!newListName.trim()) {
       setCreateError('List name is required');
+      return;
+    }
+
+    if (previewCount === null) {
+      setCreateError('Please preview leads first');
       return;
     }
 
@@ -90,14 +153,16 @@ export default function ListsPage() {
 
     try {
       const token = localStorage.getItem('liffy_token');
-
-      const res = await fetch('/api/lists', {
+      const res = await fetch('/api/lists/create-with-filters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ name: newListName.trim() })
+        body: JSON.stringify({
+          name: newListName.trim(),
+          ...getFilters()
+        })
       });
 
       if (!res.ok) {
@@ -107,7 +172,6 @@ export default function ListsPage() {
 
       const newList = await res.json();
       
-      // Normalize the new list
       const normalizedNewList: List = {
         id: newList.id || '',
         name: newList.name || newListName.trim(),
@@ -118,13 +182,24 @@ export default function ListsPage() {
       };
       
       setLists(prev => [normalizedNewList, ...prev]);
-      setShowCreateModal(false);
-      setNewListName('');
+      resetCreateModal();
     } catch (e: any) {
       setCreateError(e.message);
     } finally {
       setCreateLoading(false);
     }
+  };
+
+  const resetCreateModal = () => {
+    setShowCreateModal(false);
+    setNewListName('');
+    setDateFrom('');
+    setDateTo('');
+    setCountriesInput('');
+    setTagsInput('');
+    setEmailOnly(true);
+    setPreviewCount(null);
+    setCreateError(null);
   };
 
   const handleDelete = async () => {
@@ -134,12 +209,9 @@ export default function ListsPage() {
 
     try {
       const token = localStorage.getItem('liffy_token');
-
       const res = await fetch(`/api/lists/${deleteTarget.id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       if (!res.ok) throw new Error('Failed to delete list');
@@ -173,7 +245,6 @@ export default function ListsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Lists</h1>
@@ -186,7 +257,6 @@ export default function ListsPage() {
         </Button>
       </div>
 
-      {/* Error State */}
       {error && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-6">
@@ -200,7 +270,6 @@ export default function ListsPage() {
         </Card>
       )}
 
-      {/* Loading State */}
       {loading && (
         <Card>
           <CardContent className="py-12">
@@ -212,7 +281,6 @@ export default function ListsPage() {
         </Card>
       )}
 
-      {/* Empty State */}
       {!loading && !error && lists.length === 0 && (
         <Card>
           <CardContent className="py-12">
@@ -234,7 +302,6 @@ export default function ListsPage() {
         </Card>
       )}
 
-      {/* Lists Table */}
       {!loading && !error && lists.length > 0 && (
         <Card>
           <Table>
@@ -301,19 +368,14 @@ export default function ListsPage() {
         </Card>
       )}
 
-      {/* Create List Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div 
-            className="absolute inset-0 bg-black/50" 
-            onClick={() => {
-              setShowCreateModal(false);
-              setNewListName('');
-              setCreateError(null);
-            }}
-          />
-          <div className="relative bg-white rounded-lg shadow-lg w-full max-w-md p-6 mx-4">
-            <h2 className="text-lg font-semibold mb-4">Create New List</h2>
+          <div className="absolute inset-0 bg-black/50" onClick={resetCreateModal} />
+          <div className="relative bg-white rounded-lg shadow-lg w-full max-w-lg p-6 mx-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold mb-2">Create New List</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Filter your leads and create a static snapshot list. The list will not auto-update after creation.
+            </p>
             
             {createError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
@@ -321,38 +383,132 @@ export default function ListsPage() {
               </div>
             )}
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                List Name
-              </label>
-              <Input
-                placeholder="Enter list name..."
-                value={newListName}
-                onChange={(e) => setNewListName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !createLoading) {
-                    handleCreate();
-                  }
-                }}
-                autoFocus
-              />
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  List Name *
+                </label>
+                <Input
+                  placeholder="e.g., Germany Food Exhibitors"
+                  value={newListName}
+                  onChange={(e) => setNewListName(e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date From
+                  </label>
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date To
+                  </label>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Countries
+                </label>
+                <Input
+                  placeholder="e.g., Germany, France, Italy"
+                  value={countriesInput}
+                  onChange={(e) => setCountriesInput(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Separate multiple countries with commas
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Lead Tags
+                </label>
+                <Input
+                  placeholder="e.g., food-industry, vip, hot-lead"
+                  value={tagsInput}
+                  onChange={(e) => setTagsInput(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Filter by lead tags (comma separated). Leads with ANY of these tags will be included.
+                </p>
+                {availableTags.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs text-muted-foreground mb-1">Available tags:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {availableTags.slice(0, 10).map(tag => (
+                        <Badge 
+                          key={tag} 
+                          variant="outline" 
+                          className="text-xs cursor-pointer hover:bg-muted"
+                          onClick={() => {
+                            const current = parseCommaSeparated(tagsInput);
+                            if (!current.includes(tag)) {
+                              setTagsInput(current.length > 0 ? `${tagsInput}, ${tag}` : tag);
+                            }
+                          }}
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
+                      {availableTags.length > 10 && (
+                        <span className="text-xs text-muted-foreground">
+                          +{availableTags.length - 10} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="emailOnly"
+                  checked={emailOnly}
+                  onChange={(e) => setEmailOnly(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <label htmlFor="emailOnly" className="text-sm text-gray-700">
+                  Only include leads with email addresses
+                </label>
+              </div>
+
+              {previewCount !== null && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
+                  <p className="text-sm font-medium text-blue-800">
+                    This list will contain {formatNumber(previewCount)} leads
+                  </p>
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowCreateModal(false);
-                  setNewListName('');
-                  setCreateError(null);
-                }}
-                disabled={createLoading}
-              >
+            <div className="flex justify-end gap-3 mt-6">
+              <Button variant="outline" onClick={resetCreateModal} disabled={createLoading || previewLoading}>
                 Cancel
               </Button>
               <Button
+                variant="outline"
+                onClick={handlePreview}
+                disabled={previewLoading || createLoading}
+              >
+                {previewLoading ? 'Loading...' : 'Preview Leads'}
+              </Button>
+              <Button
                 onClick={handleCreate}
-                disabled={createLoading || !newListName.trim()}
+                disabled={createLoading || previewLoading || !newListName.trim() || previewCount === null}
               >
                 {createLoading ? 'Creating...' : 'Create List'}
               </Button>
@@ -361,27 +517,19 @@ export default function ListsPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div 
-            className="absolute inset-0 bg-black/50" 
-            onClick={() => setDeleteTarget(null)}
-          />
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDeleteTarget(null)} />
           <div className="relative bg-white rounded-lg shadow-lg w-full max-w-md p-6 mx-4">
             <h2 className="text-lg font-semibold mb-2">Delete List</h2>
             <p className="text-muted-foreground mb-4">
               Are you sure you want to delete <strong>{deleteTarget.name}</strong>? 
-              This will also remove all {formatNumber(deleteTarget.total_leads)} leads from this list. 
+              This will remove all {formatNumber(deleteTarget.total_leads)} leads from this list. 
               This action cannot be undone.
             </p>
 
             <div className="flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleteLoading}
-              >
+              <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>
                 Cancel
               </Button>
               <Button
