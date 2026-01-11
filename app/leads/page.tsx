@@ -6,7 +6,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface Lead {
   id: string;
@@ -28,7 +27,7 @@ interface LeadsResponse {
 }
 
 const VERIFICATION_STATUSES = [
-  { value: 'all', label: 'All Statuses' },
+  { value: '', label: 'All Statuses' },
   { value: 'valid', label: 'Valid' },
   { value: 'invalid', label: 'Invalid' },
   { value: 'risky', label: 'Risky' },
@@ -47,17 +46,15 @@ export default function LeadsPage() {
   const [total, setTotal] = useState(0);
 
   const [search, setSearch] = useState('');
-  const [verificationStatus, setVerificationStatus] = useState('all');
+  const [verificationStatus, setVerificationStatus] = useState('');
   const [country, setCountry] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  // Debounce search
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
     return () => clearTimeout(t);
   }, [search]);
 
-  // Reset to page 1 when filters change
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, verificationStatus, country]);
@@ -73,9 +70,7 @@ export default function LeadsPage() {
       });
 
       if (debouncedSearch) params.append('search', debouncedSearch);
-      if (verificationStatus && verificationStatus !== 'all') {
-        params.append('verification_status', verificationStatus);
-      }
+      if (verificationStatus) params.append('verification_status', verificationStatus);
       if (country) params.append('country', country);
 
       const token = localStorage.getItem('liffy_token');
@@ -103,11 +98,11 @@ export default function LeadsPage() {
   }, [fetchLeads]);
 
   const totalPages = Math.ceil(total / limit);
-  const hasActiveFilters = search || (verificationStatus && verificationStatus !== 'all') || country;
+  const hasActiveFilters = search || verificationStatus || country;
 
   const clearFilters = () => {
     setSearch('');
-    setVerificationStatus('all');
+    setVerificationStatus('');
     setCountry('');
   };
 
@@ -147,7 +142,7 @@ export default function LeadsPage() {
     return { display, isMined };
   };
 
-  const startRecord = (page - 1) * limit + 1;
+  const startRecord = total > 0 ? (page - 1) * limit + 1 : 0;
   const endRecord = Math.min(page * limit, total);
 
   return (
@@ -175,19 +170,18 @@ export default function LeadsPage() {
               />
             </div>
 
-            {/* Verification Status */}
-            <Select value={verificationStatus} onValueChange={setVerificationStatus}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                {VERIFICATION_STATUSES.map(s => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Verification Status - Native Select */}
+            <select
+              value={verificationStatus}
+              onChange={e => setVerificationStatus(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              {VERIFICATION_STATUSES.map(s => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
 
             {/* Country */}
             <Input
@@ -201,7 +195,6 @@ export default function LeadsPage() {
               variant="outline"
               onClick={clearFilters}
               disabled={!hasActiveFilters}
-              className={!hasActiveFilters ? 'opacity-50' : ''}
             >
               Clear Filters
             </Button>
