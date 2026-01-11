@@ -65,7 +65,13 @@ export default function LeadsPage() {
       if (verificationStatus) params.append('verification_status', verificationStatus);
       if (country) params.append('country', country);
 
-      const res = await fetch(`/api/leads?${params.toString()}`);
+      const token = localStorage.getItem('token');
+
+const res = await fetch(`/api/leads?${params.toString()}`, {
+  headers: {
+    Authorization: `Bearer ${token}`
+  }
+});
       if (!res.ok) throw new Error('Failed to fetch leads');
 
       const data: LeadsResponse = await res.json();
