@@ -65,7 +65,7 @@ export default function LeadsPage() {
       if (verificationStatus) params.append('verification_status', verificationStatus);
       if (country) params.append('country', country);
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('liffy_token');
 
 const res = await fetch(`/api/leads?${params.toString()}`, {
   headers: {
