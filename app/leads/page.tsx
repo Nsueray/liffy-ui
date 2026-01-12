@@ -51,10 +51,13 @@ export default function LeadsPage() {
   const [country, setCountry] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  // Tag editing state
   const [editingTagsId, setEditingTagsId] = useState<string | null>(null);
   const [editingTagsValue, setEditingTagsValue] = useState('');
   const [savingTags, setSavingTags] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkTagsInput, setBulkTagsInput] = useState('');
+  const [bulkTagsLoading, setBulkTagsLoading] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
@@ -95,6 +98,7 @@ export default function LeadsPage() {
         tags: Array.isArray(l.tags) ? l.tags : []
       })));
       setTotal(data.total);
+      setSelectedIds(new Set());
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -149,6 +153,69 @@ export default function LeadsPage() {
       alert(e.message);
     } finally {
       setSavingTags(false);
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === leads.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(leads.map(l => l.id)));
+    }
+  };
+
+  const handleSelectOne = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const handleBulkTag = async () => {
+    const tags = bulkTagsInput
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
+
+    if (tags.length === 0) {
+      alert('Please enter at least one tag');
+      return;
+    }
+
+    setBulkTagsLoading(true);
+
+    try {
+      const token = localStorage.getItem('liffy_token');
+      const res = await fetch('/api/leads/bulk-tags', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          lead_ids: Array.from(selectedIds),
+          tags
+        })
+      });
+
+      if (!res.ok) throw new Error('Failed to apply tags');
+
+      const data = await res.json();
+
+      const updatedMap = new Map(data.leads.map((l: any) => [l.id, l.tags]));
+      setLeads(prev => prev.map(l => 
+        updatedMap.has(l.id) ? { ...l, tags: updatedMap.get(l.id) || [] } : l
+      ));
+
+      setSelectedIds(new Set());
+      setBulkTagsInput('');
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setBulkTagsLoading(false);
     }
   };
 
@@ -251,6 +318,43 @@ export default function LeadsPage() {
         </CardContent>
       </Card>
 
+      {selectedIds.size > 0 && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium">
+                {selectedIds.size} lead{selectedIds.size !== 1 ? 's' : ''} selected
+              </span>
+              <div className="flex-1 flex items-center gap-2">
+                <Input
+                  placeholder="Enter tags (comma separated)..."
+                  value={bulkTagsInput}
+                  onChange={e => setBulkTagsInput(e.target.value)}
+                  className="max-w-xs"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !bulkTagsLoading) handleBulkTag();
+                  }}
+                />
+                <Button
+                  onClick={handleBulkTag}
+                  disabled={bulkTagsLoading || !bulkTagsInput.trim()}
+                  size="sm"
+                >
+                  {bulkTagsLoading ? 'Applying...' : 'Apply Tags'}
+                </Button>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Clear Selection
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {error && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-6">
@@ -306,6 +410,14 @@ export default function LeadsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size === leads.length && leads.length > 0}
+                      onChange={handleSelectAll}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                  </TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Company</TableHead>
@@ -320,9 +432,18 @@ export default function LeadsPage() {
                 {leads.map(lead => {
                   const source = formatSource(lead.source_type, lead.source_ref);
                   const isEditingTags = editingTagsId === lead.id;
+                  const isSelected = selectedIds.has(lead.id);
                   
                   return (
-                    <TableRow key={lead.id}>
+                    <TableRow key={lead.id} className={isSelected ? 'bg-orange-50' : ''}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleSelectOne(lead.id)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">{lead.email}</TableCell>
                       <TableCell>{lead.name || <span className="text-muted-foreground">-</span>}</TableCell>
                       <TableCell>{lead.company || <span className="text-muted-foreground">-</span>}</TableCell>
