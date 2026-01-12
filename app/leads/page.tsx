@@ -205,7 +205,12 @@ export default function LeadsPage() {
 
       const data = await res.json();
 
-      const updatedMap = new Map(data.leads.map((l: any) => [l.id, l.tags]));
+      const updatedMap = new Map(
+  data.leads.map((l: any) => [
+    l.id,
+    Array.isArray(l.tags) ? l.tags : []
+  ])
+);
       setLeads(prev => prev.map(l => 
         updatedMap.has(l.id) ? { ...l, tags: updatedMap.get(l.id) || [] } : l
       ));
