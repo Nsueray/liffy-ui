@@ -205,15 +205,16 @@ export default function LeadsPage() {
 
       const data = await res.json();
 
-      const updatedMap = new Map(
-  data.leads.map((l: any) => [
-    l.id,
-    Array.isArray(l.tags) ? l.tags : []
-  ])
-);
-      setLeads(prev => prev.map(l => 
-        updatedMap.has(l.id) ? { ...l, tags: updatedMap.get(l.id) || [] } : l
-      ));
+      const updatedMap = new Map<string, string[]>(
+        data.leads.map((l: { id: string; tags: string[] }) => [
+          l.id,
+          Array.isArray(l.tags) ? l.tags : []
+        ])
+      );
+      setLeads(prev => prev.map(l => {
+        const newTags = updatedMap.get(l.id);
+        return newTags !== undefined ? { ...l, tags: newTags } : l;
+      }));
 
       setSelectedIds(new Set());
       setBulkTagsInput('');
