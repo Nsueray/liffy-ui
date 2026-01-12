@@ -468,6 +468,9 @@ export default function ListsPage() {
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <option value="">All leads (no specific job)</option>
+                  {miningJobs.length === 0 && (
+                    <option value="" disabled>No mining jobs found</option>
+                  )}
                   {miningJobs.map(job => (
                     <option key={job.id} value={job.id}>
                       {truncateUrl(job.target_url, 50)} • {job.lead_count} leads • {formatDate(job.created_at)}
