@@ -18,6 +18,14 @@ interface List {
   unverified_count: number;
 }
 
+interface MiningJob {
+  id: string;
+  target_url: string;
+  status: string;
+  created_at: string;
+  lead_count: number;
+}
+
 export default function ListsPage() {
   useAuthGuard();
   const router = useRouter();
@@ -35,7 +43,7 @@ export default function ListsPage() {
   const [sourceTypeMining, setSourceTypeMining] = useState(false);
   const [sourceTypeImport, setSourceTypeImport] = useState(false);
   const [sourceTypeManual, setSourceTypeManual] = useState(false);
-  const [miningJobId, setMiningJobId] = useState('');
+  const [selectedMiningJob, setSelectedMiningJob] = useState('');
   const [emailOnly, setEmailOnly] = useState(true);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -43,6 +51,7 @@ export default function ListsPage() {
   const [createError, setCreateError] = useState<string | null>(null);
 
   const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [miningJobs, setMiningJobs] = useState<MiningJob[]>([]);
 
   const [deleteTarget, setDeleteTarget] = useState<List | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -93,10 +102,26 @@ export default function ListsPage() {
     }
   }, []);
 
+  const fetchMiningJobs = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('liffy_token');
+      const res = await fetch('/api/lists/mining-jobs', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMiningJobs(data.jobs || []);
+      }
+    } catch {
+      // Silently fail
+    }
+  }, []);
+
   useEffect(() => {
     fetchLists();
     fetchAvailableTags();
-  }, [fetchLists, fetchAvailableTags]);
+    fetchMiningJobs();
+  }, [fetchLists, fetchAvailableTags, fetchMiningJobs]);
 
   const parseCommaSeparated = (input: string): string[] => {
     return input.split(',').map(s => s.trim()).filter(s => s.length > 0);
@@ -122,7 +147,7 @@ export default function ListsPage() {
     if (sourceTypeManual) sourceTypes.push('manual');
     if (sourceTypes.length > 0) filters.source_types = sourceTypes;
 
-    if (miningJobId.trim()) filters.mining_job_id = miningJobId.trim();
+    if (selectedMiningJob) filters.mining_job_id = selectedMiningJob;
 
     return filters;
   };
@@ -222,7 +247,7 @@ export default function ListsPage() {
     setSourceTypeMining(false);
     setSourceTypeImport(false);
     setSourceTypeManual(false);
-    setMiningJobId('');
+    setSelectedMiningJob('');
     setEmailOnly(true);
     setPreviewCount(null);
     setCreateError(null);
@@ -270,6 +295,12 @@ export default function ListsPage() {
     } catch {
       return '-';
     }
+  };
+
+  const truncateUrl = (url: string, maxLength: number = 40): string => {
+    if (!url) return 'Unknown';
+    if (url.length <= maxLength) return url;
+    return url.substring(0, maxLength) + '...';
   };
 
   return (
@@ -400,10 +431,10 @@ export default function ListsPage() {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={resetCreateModal} />
-          <div className="relative bg-white rounded-lg shadow-lg w-full max-w-xl p-6 mx-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold mb-1">Create New List</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Select leads based on filters below. All filters are optional.
+          <div className="relative bg-white rounded-lg shadow-lg w-full max-w-2xl p-6 mx-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-semibold mb-1">Create New List</h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              Filter your leads and create a targeted list for campaigns.
             </p>
 
             {createError && (
@@ -412,20 +443,45 @@ export default function ListsPage() {
               </div>
             )}
 
-            <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+            <div className="space-y-6">
+              {/* List Name */}
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   List Name <span className="text-red-500">*</span>
                 </label>
                 <Input
-                  placeholder="e.g., Germany Food Companies Q1"
+                  placeholder="e.g., Germany Water Companies Q1 2026"
                   value={newListName}
                   onChange={(e) => setNewListName(e.target.value)}
+                  className="text-base"
                 />
               </div>
 
-              <div className="border-t pt-4">
-                <p className="text-sm font-medium text-gray-700 mb-3">Filters (all optional)</p>
+              {/* Mining Job Selection */}
+              <div className="p-4 border rounded-lg">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  From Mining Job
+                </label>
+                <select
+                  value={selectedMiningJob}
+                  onChange={(e) => setSelectedMiningJob(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">All leads (no specific job)</option>
+                  {miningJobs.map(job => (
+                    <option key={job.id} value={job.id}>
+                      {truncateUrl(job.target_url, 50)} • {job.lead_count} leads • {formatDate(job.created_at)}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Select a mining job to create a list from its results
+                </p>
+              </div>
+
+              {/* Additional Filters */}
+              <div className="p-4 border rounded-lg">
+                <p className="text-sm font-medium text-gray-700 mb-3">Additional Filters (optional)</p>
 
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
@@ -453,19 +509,15 @@ export default function ListsPage() {
                     value={countriesInput}
                     onChange={(e) => setCountriesInput(e.target.value)}
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Comma separated</p>
                 </div>
 
                 <div className="mb-4">
                   <label className="block text-xs text-gray-500 mb-1">Lead Tags</label>
                   <Input
-                    placeholder="vip, hot-lead, food-industry"
+                    placeholder="vip, hot-lead"
                     value={tagsInput}
                     onChange={(e) => setTagsInput(e.target.value)}
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Leads with ANY of these tags will be included
-                  </p>
                   {availableTags.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {availableTags.slice(0, 8).map(tag => (
@@ -483,11 +535,6 @@ export default function ListsPage() {
                           {tag}
                         </Badge>
                       ))}
-                      {availableTags.length > 8 && (
-                        <span className="text-xs text-muted-foreground ml-1">
-                          +{availableTags.length - 8} more
-                        </span>
-                      )}
                     </div>
                   )}
                 </div>
@@ -525,18 +572,6 @@ export default function ListsPage() {
                   </div>
                 </div>
 
-                <div className="mb-4">
-                  <label className="block text-xs text-gray-500 mb-1">Mining Job ID (contains)</label>
-                  <Input
-                    placeholder="e.g., abc123"
-                    value={miningJobId}
-                    onChange={(e) => setMiningJobId(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Filter by mining job reference
-                  </p>
-                </div>
-
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -551,36 +586,42 @@ export default function ListsPage() {
                 </div>
               </div>
 
+              {/* Preview Result */}
               {previewCount !== null && (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
-                  <p className="text-sm font-medium text-blue-800">
-                    This list will contain {formatNumber(previewCount)} leads
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-lg font-semibold text-blue-800">
+                    {formatNumber(previewCount)} leads match your criteria
+                  </p>
+                  <p className="text-sm text-blue-600 mt-1">
+                    Click "Create List" to save this selection
                   </p>
                 </div>
               )}
             </div>
 
-            <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+            <div className="flex justify-between gap-3 mt-6 pt-4 border-t">
               <Button
-                variant="outline"
+                variant="ghost"
                 onClick={resetCreateModal}
                 disabled={createLoading || previewLoading}
               >
                 Cancel
               </Button>
-              <Button
-                variant="outline"
-                onClick={handlePreview}
-                disabled={previewLoading || createLoading}
-              >
-                {previewLoading ? 'Counting...' : 'Preview Leads'}
-              </Button>
-              <Button
-                onClick={handleCreate}
-                disabled={createLoading || previewLoading || !newListName.trim() || previewCount === null}
-              >
-                {createLoading ? 'Creating...' : 'Create List'}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handlePreview}
+                  disabled={previewLoading || createLoading}
+                >
+                  {previewLoading ? 'Counting...' : 'Preview Leads'}
+                </Button>
+                <Button
+                  onClick={handleCreate}
+                  disabled={createLoading || previewLoading || !newListName.trim() || previewCount === null}
+                >
+                  {createLoading ? 'Creating...' : 'Create List'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
