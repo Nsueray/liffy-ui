@@ -32,13 +32,16 @@ export default function ListsPage() {
   const [dateTo, setDateTo] = useState('');
   const [countriesInput, setCountriesInput] = useState('');
   const [tagsInput, setTagsInput] = useState('');
+  const [sourceTypeMining, setSourceTypeMining] = useState(false);
+  const [sourceTypeImport, setSourceTypeImport] = useState(false);
+  const [sourceTypeManual, setSourceTypeManual] = useState(false);
+  const [miningJobId, setMiningJobId] = useState('');
   const [emailOnly, setEmailOnly] = useState(true);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  // Available tags from leads
   const [availableTags, setAvailableTags] = useState<string[]>([]);
 
   const [deleteTarget, setDeleteTarget] = useState<List | null>(null);
@@ -58,17 +61,15 @@ export default function ListsPage() {
 
       const data = await res.json();
       const listsArray = Array.isArray(data.lists) ? data.lists : [];
-      
-      const normalizedLists = listsArray.map((item: any) => ({
+
+      setLists(listsArray.map((item: any) => ({
         id: item.id || '',
         name: item.name || 'Unnamed List',
         created_at: item.created_at || new Date().toISOString(),
         total_leads: Number(item.total_leads) || 0,
         verified_count: Number(item.verified_count) || 0,
         unverified_count: Number(item.unverified_count) || 0
-      }));
-      
-      setLists(normalizedLists);
+      })));
     } catch (e: any) {
       setError(e.message);
       setLists([]);
@@ -83,13 +84,12 @@ export default function ListsPage() {
       const res = await fetch('/api/lists/tags', {
         headers: { Authorization: `Bearer ${token}` }
       });
-
       if (res.ok) {
         const data = await res.json();
         setAvailableTags(data.tags || []);
       }
-    } catch (e) {
-      // Silently fail - tags are optional
+    } catch {
+      // Silently fail
     }
   }, []);
 
@@ -102,13 +102,30 @@ export default function ListsPage() {
     return input.split(',').map(s => s.trim()).filter(s => s.length > 0);
   };
 
-  const getFilters = () => ({
-    date_from: dateFrom || undefined,
-    date_to: dateTo || undefined,
-    countries: parseCommaSeparated(countriesInput),
-    tags: parseCommaSeparated(tagsInput),
-    email_only: emailOnly
-  });
+  const getFilters = () => {
+    const filters: Record<string, any> = {
+      email_only: emailOnly
+    };
+
+    if (dateFrom) filters.date_from = dateFrom;
+    if (dateTo) filters.date_to = dateTo;
+
+    const countries = parseCommaSeparated(countriesInput);
+    if (countries.length > 0) filters.countries = countries;
+
+    const tags = parseCommaSeparated(tagsInput);
+    if (tags.length > 0) filters.tags = tags;
+
+    const sourceTypes: string[] = [];
+    if (sourceTypeMining) sourceTypes.push('mining');
+    if (sourceTypeImport) sourceTypes.push('import');
+    if (sourceTypeManual) sourceTypes.push('manual');
+    if (sourceTypes.length > 0) filters.source_types = sourceTypes;
+
+    if (miningJobId.trim()) filters.mining_job_id = miningJobId.trim();
+
+    return filters;
+  };
 
   const handlePreview = async () => {
     setPreviewLoading(true);
@@ -117,18 +134,23 @@ export default function ListsPage() {
 
     try {
       const token = localStorage.getItem('liffy_token');
+      const filters = getFilters();
+
       const res = await fetch('/api/lists/preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(getFilters())
+        body: JSON.stringify(filters)
       });
 
-      if (!res.ok) throw new Error('Failed to preview');
-
       const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to preview leads');
+      }
+
       setPreviewCount(data.count);
     } catch (e: any) {
       setCreateError(e.message);
@@ -153,6 +175,8 @@ export default function ListsPage() {
 
     try {
       const token = localStorage.getItem('liffy_token');
+      const filters = getFilters();
+
       const res = await fetch('/api/lists/create-with-filters', {
         method: 'POST',
         headers: {
@@ -161,27 +185,25 @@ export default function ListsPage() {
         },
         body: JSON.stringify({
           name: newListName.trim(),
-          ...getFilters()
+          ...filters
         })
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error || 'Failed to create list');
       }
 
-      const newList = await res.json();
-      
-      const normalizedNewList: List = {
-        id: newList.id || '',
-        name: newList.name || newListName.trim(),
-        created_at: newList.created_at || new Date().toISOString(),
-        total_leads: Number(newList.total_leads) || 0,
-        verified_count: Number(newList.verified_count) || 0,
-        unverified_count: Number(newList.unverified_count) || 0
-      };
-      
-      setLists(prev => [normalizedNewList, ...prev]);
+      setLists(prev => [{
+        id: data.id || '',
+        name: data.name || newListName.trim(),
+        created_at: data.created_at || new Date().toISOString(),
+        total_leads: Number(data.total_leads) || 0,
+        verified_count: Number(data.verified_count) || 0,
+        unverified_count: Number(data.unverified_count) || 0
+      }, ...prev]);
+
       resetCreateModal();
     } catch (e: any) {
       setCreateError(e.message);
@@ -197,6 +219,10 @@ export default function ListsPage() {
     setDateTo('');
     setCountriesInput('');
     setTagsInput('');
+    setSourceTypeMining(false);
+    setSourceTypeImport(false);
+    setSourceTypeManual(false);
+    setMiningJobId('');
     setEmailOnly(true);
     setPreviewCount(null);
     setCreateError(null);
@@ -214,7 +240,10 @@ export default function ListsPage() {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to delete list');
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete list');
+      }
 
       setLists(prev => prev.filter(l => l.id !== deleteTarget.id));
       setDeleteTarget(null);
@@ -317,8 +346,8 @@ export default function ListsPage() {
             </TableHeader>
             <TableBody>
               {lists.map(list => (
-                <TableRow 
-                  key={list.id} 
+                <TableRow
+                  key={list.id}
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => handleRowClick(list.id)}
                 >
@@ -371,87 +400,78 @@ export default function ListsPage() {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={resetCreateModal} />
-          <div className="relative bg-white rounded-lg shadow-lg w-full max-w-lg p-6 mx-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold mb-2">Create New List</h2>
+          <div className="relative bg-white rounded-lg shadow-lg w-full max-w-xl p-6 mx-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold mb-1">Create New List</h2>
             <p className="text-sm text-muted-foreground mb-4">
-              Filter your leads and create a static snapshot list. The list will not auto-update after creation.
+              Select leads based on filters below. All filters are optional.
             </p>
-            
+
             {createError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
                 <p className="text-sm text-red-600">{createError}</p>
               </div>
             )}
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  List Name *
+                  List Name <span className="text-red-500">*</span>
                 </label>
                 <Input
-                  placeholder="e.g., Germany Food Exhibitors"
+                  placeholder="e.g., Germany Food Companies Q1"
                   value={newListName}
                   onChange={(e) => setNewListName(e.target.value)}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date From
-                  </label>
-                  <Input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date To
-                  </label>
-                  <Input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                  />
-                </div>
-              </div>
+              <div className="border-t pt-4">
+                <p className="text-sm font-medium text-gray-700 mb-3">Filters (all optional)</p>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Countries
-                </label>
-                <Input
-                  placeholder="e.g., Germany, France, Italy"
-                  value={countriesInput}
-                  onChange={(e) => setCountriesInput(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Separate multiple countries with commas
-                </p>
-              </div>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Date From</label>
+                    <Input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Date To</label>
+                    <Input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                    />
+                  </div>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Lead Tags
-                </label>
-                <Input
-                  placeholder="e.g., food-industry, vip, hot-lead"
-                  value={tagsInput}
-                  onChange={(e) => setTagsInput(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Filter by lead tags (comma separated). Leads with ANY of these tags will be included.
-                </p>
-                {availableTags.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-xs text-muted-foreground mb-1">Available tags:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {availableTags.slice(0, 10).map(tag => (
-                        <Badge 
-                          key={tag} 
-                          variant="outline" 
+                <div className="mb-4">
+                  <label className="block text-xs text-gray-500 mb-1">Countries</label>
+                  <Input
+                    placeholder="Germany, France, Italy"
+                    value={countriesInput}
+                    onChange={(e) => setCountriesInput(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Comma separated</p>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-xs text-gray-500 mb-1">Lead Tags</label>
+                  <Input
+                    placeholder="vip, hot-lead, food-industry"
+                    value={tagsInput}
+                    onChange={(e) => setTagsInput(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Leads with ANY of these tags will be included
+                  </p>
+                  {availableTags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {availableTags.slice(0, 8).map(tag => (
+                        <Badge
+                          key={tag}
+                          variant="outline"
                           className="text-xs cursor-pointer hover:bg-muted"
                           onClick={() => {
                             const current = parseCommaSeparated(tagsInput);
@@ -463,27 +483,72 @@ export default function ListsPage() {
                           {tag}
                         </Badge>
                       ))}
-                      {availableTags.length > 10 && (
-                        <span className="text-xs text-muted-foreground">
-                          +{availableTags.length - 10} more
+                      {availableTags.length > 8 && (
+                        <span className="text-xs text-muted-foreground ml-1">
+                          +{availableTags.length - 8} more
                         </span>
                       )}
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
 
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="emailOnly"
-                  checked={emailOnly}
-                  onChange={(e) => setEmailOnly(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-                <label htmlFor="emailOnly" className="text-sm text-gray-700">
-                  Only include leads with email addresses
-                </label>
+                <div className="mb-4">
+                  <label className="block text-xs text-gray-500 mb-2">Source Type</label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={sourceTypeMining}
+                        onChange={(e) => setSourceTypeMining(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      Mining
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={sourceTypeImport}
+                        onChange={(e) => setSourceTypeImport(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      Import
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={sourceTypeManual}
+                        onChange={(e) => setSourceTypeManual(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      Manual
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-xs text-gray-500 mb-1">Mining Job ID (contains)</label>
+                  <Input
+                    placeholder="e.g., abc123"
+                    value={miningJobId}
+                    onChange={(e) => setMiningJobId(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Filter by mining job reference
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="emailOnly"
+                    checked={emailOnly}
+                    onChange={(e) => setEmailOnly(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <label htmlFor="emailOnly" className="text-sm text-gray-700">
+                    Only include leads with email addresses
+                  </label>
+                </div>
               </div>
 
               {previewCount !== null && (
@@ -495,8 +560,12 @@ export default function ListsPage() {
               )}
             </div>
 
-            <div className="flex justify-end gap-3 mt-6">
-              <Button variant="outline" onClick={resetCreateModal} disabled={createLoading || previewLoading}>
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={resetCreateModal}
+                disabled={createLoading || previewLoading}
+              >
                 Cancel
               </Button>
               <Button
@@ -504,7 +573,7 @@ export default function ListsPage() {
                 onClick={handlePreview}
                 disabled={previewLoading || createLoading}
               >
-                {previewLoading ? 'Loading...' : 'Preview Leads'}
+                {previewLoading ? 'Counting...' : 'Preview Leads'}
               </Button>
               <Button
                 onClick={handleCreate}
@@ -523,13 +592,16 @@ export default function ListsPage() {
           <div className="relative bg-white rounded-lg shadow-lg w-full max-w-md p-6 mx-4">
             <h2 className="text-lg font-semibold mb-2">Delete List</h2>
             <p className="text-muted-foreground mb-4">
-              Are you sure you want to delete <strong>{deleteTarget.name}</strong>? 
-              This will remove all {formatNumber(deleteTarget.total_leads)} leads from this list. 
+              Are you sure you want to delete <strong>{deleteTarget.name}</strong>?
+              This will remove all {formatNumber(deleteTarget.total_leads)} leads from this list.
               This action cannot be undone.
             </p>
-
             <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteLoading}
+              >
                 Cancel
               </Button>
               <Button
