@@ -17,18 +17,34 @@ interface Campaign {
   created_at: string;
 }
 
+interface EmailTemplate {
+  id: string;
+  name: string;
+  subject: string;
+}
+
 export default function CampaignsPage() {
   useAuthGuard();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [newCampaignName, setNewCampaignName] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://api.liffy.app";
 
+  const getToken = () => {
+    return typeof window !== "undefined" ? localStorage.getItem("liffy_token") : null;
+  };
+
   const fetchCampaigns = useCallback(async () => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("liffy_token") : null;
-    
+    const token = getToken();
     if (!token) {
       setLoading(false);
       return;
@@ -55,12 +71,35 @@ export default function CampaignsPage() {
     }
   }, [apiBase]);
 
+  const fetchTemplates = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${apiBase}/api/email-templates`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch templates");
+      }
+
+      const data = await res.json();
+      setTemplates(Array.isArray(data) ? data : []);
+    } catch (err: unknown) {
+      console.error("Failed to fetch templates:", err);
+    }
+  }, [apiBase]);
+
   useEffect(() => {
     fetchCampaigns();
-  }, [fetchCampaigns]);
+    fetchTemplates();
+  }, [fetchCampaigns, fetchTemplates]);
 
   async function handleAction(campaignId: string, action: "resolve" | "pause" | "resume") {
-    const token = typeof window !== "undefined" ? localStorage.getItem("liffy_token") : null;
+    const token = getToken();
     if (!token) return;
 
     setActionLoading(campaignId);
@@ -91,6 +130,55 @@ export default function CampaignsPage() {
       setError(message);
     } finally {
       setActionLoading(null);
+    }
+  }
+
+  async function handleCreateCampaign(e: React.FormEvent) {
+    e.preventDefault();
+    const token = getToken();
+    if (!token) return;
+
+    if (!newCampaignName.trim()) {
+      setCreateError("Campaign name is required");
+      return;
+    }
+
+    if (!selectedTemplateId) {
+      setCreateError("Please select a template");
+      return;
+    }
+
+    setCreateLoading(true);
+    setCreateError(null);
+
+    try {
+      const res = await fetch(`${apiBase}/api/campaigns`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: newCampaignName.trim(),
+          template_id: selectedTemplateId,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create campaign");
+      }
+
+      setCampaigns((prev) => [data, ...prev]);
+      setShowCreateModal(false);
+      setNewCampaignName("");
+      setSelectedTemplateId("");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to create campaign";
+      setCreateError(message);
+    } finally {
+      setCreateLoading(false);
     }
   }
 
@@ -129,11 +217,19 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-3xl font-bold">Campaigns</h2>
-        <p className="text-sm text-muted-foreground">
-          Create and track your outbound email campaigns.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold">Campaigns</h2>
+          <p className="text-sm text-muted-foreground">
+            Create and track your outbound email campaigns.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+        >
+          Create Campaign
+        </button>
       </div>
 
       {error && (
@@ -161,7 +257,10 @@ export default function CampaignsPage() {
                   Recipients
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Scheduled
+                  Template
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Created
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -187,7 +286,10 @@ export default function CampaignsPage() {
                     {campaign.recipient_count ?? "-"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(campaign.scheduled_at)}
+                    {campaign.template_name || campaign.template_subject || "-"}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {formatDate(campaign.created_at)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex gap-2">
@@ -225,6 +327,75 @@ export default function CampaignsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Create Campaign</h3>
+
+            {createError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded mb-4 text-sm">
+                {createError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateCampaign}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Campaign Name
+                </label>
+                <input
+                  type="text"
+                  value={newCampaignName}
+                  onChange={(e) => setNewCampaignName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter campaign name"
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email Template
+                </label>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select a template</option>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name || template.subject}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setNewCampaignName("");
+                    setSelectedTemplateId("");
+                    setCreateError(null);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createLoading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {createLoading ? "Creating..." : "Create"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
