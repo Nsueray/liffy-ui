@@ -26,26 +26,20 @@ export default function CampaignsPage() {
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://api.liffy.app";
 
-  const getAuthFromStorage = useCallback(() => {
-    if (typeof window === "undefined") return { token: null, organizerId: null };
-    const token = localStorage.getItem("liffy_token");
-    const organizerId = localStorage.getItem("liffy_organizer_id");
-    return { token, organizerId };
-  }, []);
-
   const fetchCampaigns = useCallback(async () => {
-    const { token, organizerId } = getAuthFromStorage();
-    if (!token || !organizerId) return;
+    const token = typeof window !== "undefined" ? localStorage.getItem("liffy_token") : null;
+    
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
     try {
-      const res = await fetch(
-        `${apiBase}/api/campaigns?organizer_id=${organizerId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const res = await fetch(`${apiBase}/api/campaigns`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (!res.ok) {
         throw new Error("Failed to fetch campaigns");
@@ -59,14 +53,14 @@ export default function CampaignsPage() {
     } finally {
       setLoading(false);
     }
-  }, [apiBase, getAuthFromStorage]);
+  }, [apiBase]);
 
   useEffect(() => {
     fetchCampaigns();
   }, [fetchCampaigns]);
 
   async function handleAction(campaignId: string, action: "resolve" | "pause" | "resume") {
-    const { token } = getAuthFromStorage();
+    const token = typeof window !== "undefined" ? localStorage.getItem("liffy_token") : null;
     if (!token) return;
 
     setActionLoading(campaignId);
