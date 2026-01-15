@@ -87,7 +87,7 @@ export default function CampaignsPage() {
       }
 
       const data = await res.json();
-      setTemplates(Array.isArray(data) ? data : []);
+      setTemplates(data.templates || (Array.isArray(data) ? data : []));
     } catch (err: unknown) {
       console.error("Failed to fetch templates:", err);
     }
