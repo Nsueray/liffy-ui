@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL;
 
-// Ortak proxy helper – diğer route'larda da kopyalayıp kullanabiliriz
+/**
+ * Proxy helper for mining jobs API
+ * Handles both JSON and multipart/form-data (file uploads) correctly
+ */
 async function proxyRequest(
   req: Request,
   path: string
@@ -18,28 +21,44 @@ async function proxyRequest(
   const url = new URL(req.url);
   const targetUrl = new URL(path, BACKEND_URL);
 
-  // Query string'leri de forward et
+  // Query string'leri forward et
   targetUrl.search = url.search;
 
-  // Orijinal request'ten body ve method'u al
   const method = req.method;
+  const contentType = req.headers.get("content-type") || "";
+
+  // Headers hazırla
   const headers = new Headers();
-
-  // Sadece gerekli header'ları kopyalayalım
-  const incomingHeaders = req.headers;
-  const auth = incomingHeaders.get("authorization");
-  const contentType = incomingHeaders.get("content-type");
-
+  const auth = req.headers.get("authorization");
   if (auth) headers.set("authorization", auth);
-  if (contentType) headers.set("content-type", contentType);
   headers.set("accept", "application/json");
+
+  let body: BodyInit | undefined = undefined;
+
+  if (method !== "GET" && method !== "HEAD") {
+    // Multipart form-data (file upload) için BINARY olarak forward et
+    if (contentType.includes("multipart/form-data")) {
+      // Content-Type header'ı aynen koru (boundary dahil)
+      headers.set("content-type", contentType);
+      // Body'yi arrayBuffer olarak al - BINARY KORUR
+      body = await req.arrayBuffer();
+    } 
+    // JSON için normal text olarak al
+    else if (contentType.includes("application/json")) {
+      headers.set("content-type", "application/json");
+      body = await req.text();
+    }
+    // Diğer content type'lar için arrayBuffer kullan (güvenli)
+    else {
+      if (contentType) headers.set("content-type", contentType);
+      body = await req.arrayBuffer();
+    }
+  }
 
   const init: RequestInit = {
     method,
     headers,
-    // GET/HEAD dışındaki method'larda body forward edilecek
-    body:
-      method === "GET" || method === "HEAD" ? undefined : await req.text(),
+    body,
   };
 
   let backendRes: Response;
@@ -55,7 +74,7 @@ async function proxyRequest(
 
   const text = await backendRes.text();
 
-  // Backend JSON dönüyorsa JSON parse etmeye çalış
+  // Backend JSON dönüyorsa parse et
   try {
     const data = text ? JSON.parse(text) : null;
     return NextResponse.json(data, { status: backendRes.status });
@@ -79,4 +98,3 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   return proxyRequest(req, "/api/mining/jobs");
 }
-
