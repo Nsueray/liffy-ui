@@ -70,7 +70,7 @@ export default function CampaignsPage() {
         setLists(data.lists || []);
       }
 
-      // Fetch Senders (Assuming endpoint exists, if not it will just be empty)
+      // Fetch Senders
       const senderRes = await fetch(`${apiBase}/api/senders`, { headers: { Authorization: `Bearer ${token}` } });
       if (senderRes.ok) {
         const data = await senderRes.json();
@@ -87,7 +87,7 @@ export default function CampaignsPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // --- ACTIONS ---
-  async function handleAction(campaignId: string, action: "resolve" | "pause" | "resume") {
+  async function handleAction(campaignId: string, action: "resolve" | "start" | "pause" | "resume") {
     const token = getToken();
     if (!token) return;
 
@@ -210,7 +210,7 @@ export default function CampaignsPage() {
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">{c.name}</td>
                       <td className="px-6 py-4"><span className={`px-2 py-1 text-xs rounded-full font-semibold ${getStatusBadge(c.status)}`}>{c.status}</span></td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.recipient_count ?? "-"}</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{c.template_name || "Unknown"}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{c.template_name || c.template_subject || "Unknown"}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{formatDate(c.created_at)}</td>
                       <td className="px-6 py-4 text-right text-sm">
                         <div className="flex justify-end gap-2">
@@ -225,10 +225,10 @@ export default function CampaignsPage() {
                                 </button>
                             )}
                             
-                            {/* READY -> START (Resume) */}
+                            {/* READY -> START */}
                             {c.status === 'ready' && (
                                 <button
-                                    onClick={() => handleAction(c.id, 'resume')} // Using resume logic to start
+                                    onClick={() => handleAction(c.id, 'start')}
                                     disabled={actionLoading === c.id}
                                     className="text-green-600 hover:text-green-800 font-medium disabled:opacity-50"
                                 >
