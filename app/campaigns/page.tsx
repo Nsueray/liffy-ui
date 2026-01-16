@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import Link from "next/link";
 
 interface Campaign {
   id: string;
@@ -35,6 +36,11 @@ export default function CampaignsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // Delete Modal States
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   
   // Form Inputs
   const [newCampaignName, setNewCampaignName] = useState("");
@@ -112,6 +118,41 @@ export default function CampaignsPage() {
     }
   }
 
+  // --- DELETE ---
+  function openDeleteModal(campaign: Campaign) {
+    setDeleteTarget(campaign);
+    setShowDeleteModal(true);
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    
+    const token = getToken();
+    if (!token) return;
+
+    setDeleteLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`${apiBase}/api/campaigns/${deleteTarget.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      
+      if (!res.ok) throw new Error(data.error || "Failed to delete campaign");
+
+      // Remove from list
+      setCampaigns((prev) => prev.filter((c) => c.id !== deleteTarget.id));
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
   async function handleCreateCampaign(e: React.FormEvent) {
     e.preventDefault();
     const token = getToken();
@@ -173,6 +214,11 @@ export default function CampaignsPage() {
     return styles[status] || "bg-gray-100 text-gray-800";
   }
 
+  // Can delete if not sending
+  function canDelete(status: string) {
+    return status !== 'sending';
+  }
+
   if (loading) return <div className="p-8">Loading campaigns...</div>;
 
   return (
@@ -207,7 +253,11 @@ export default function CampaignsPage() {
             ) : (
                 campaigns.map((c) => (
                     <tr key={c.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{c.name}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                        <Link href={`/campaigns/${c.id}`} className="text-blue-600 hover:text-blue-800 hover:underline">
+                          {c.name}
+                        </Link>
+                      </td>
                       <td className="px-6 py-4"><span className={`px-2 py-1 text-xs rounded-full font-semibold ${getStatusBadge(c.status)}`}>{c.status}</span></td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.recipient_count ?? "-"}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.template_name || c.template_subject || "Unknown"}</td>
@@ -255,6 +305,16 @@ export default function CampaignsPage() {
                                     className="text-green-600 hover:text-green-800 font-medium disabled:opacity-50"
                                 >
                                     Resume
+                                </button>
+                            )}
+
+                            {/* DELETE BUTTON - Show for all except 'sending' */}
+                            {canDelete(c.status) && (
+                                <button
+                                    onClick={() => openDeleteModal(c)}
+                                    className="text-red-600 hover:text-red-800 font-medium"
+                                >
+                                    Delete
                                 </button>
                             )}
                         </div>
@@ -315,6 +375,39 @@ export default function CampaignsPage() {
                     </button>
                 </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {showDeleteModal && deleteTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-lg font-bold mb-2">Delete Campaign</h3>
+            <p className="text-gray-600 mb-4">
+              Are you sure you want to delete <strong>"{deleteTarget.name}"</strong>? 
+              This will also remove all recipient data. This action cannot be undone.
+            </p>
+            
+            {error && <div className="bg-red-50 text-red-600 p-2 text-sm rounded mb-4">{error}</div>}
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <button 
+                type="button" 
+                onClick={() => { setShowDeleteModal(false); setDeleteTarget(null); }} 
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                disabled={deleteLoading}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleDelete}
+                disabled={deleteLoading} 
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteLoading ? "Deleting..." : "Delete Campaign"}
+              </button>
+            </div>
           </div>
         </div>
       )}
