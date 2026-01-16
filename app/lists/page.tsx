@@ -20,9 +20,11 @@ interface List {
 
 interface MiningJob {
   id: string;
-  target_url: string;
+  name: string;
+  target_url: string | null;
   status: string;
   created_at: string;
+  total_found: number;
   lead_count: number;
 }
 
@@ -297,12 +299,6 @@ export default function ListsPage() {
     }
   };
 
-  const truncateUrl = (url: string, maxLength: number = 40): string => {
-    if (!url) return 'Unknown';
-    if (url.length <= maxLength) return url;
-    return url.substring(0, maxLength) + '...';
-  };
-
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -473,7 +469,7 @@ export default function ListsPage() {
                   )}
                   {miningJobs.map(job => (
                     <option key={job.id} value={job.id}>
-                      {truncateUrl(job.target_url, 50)} • {job.lead_count} leads • {formatDate(job.created_at)}
+                      {job.name} • {job.lead_count} leads • {formatDate(job.created_at)}
                     </option>
                   ))}
                 </select>
