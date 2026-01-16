@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Globe, FileText, UploadCloud, FileType } from "lucide-react";
+import { ChevronLeft, Globe, FileText, UploadCloud, FileType, Zap, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { getAuthHeaders } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -19,7 +19,7 @@ export default function NewMiningJobPage() {
   const [name, setName] = useState("");
   const [inputUrl, setInputUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [strategy, setStrategy] = useState("auto");
+  const [miningMode, setMiningMode] = useState("ai"); // Default to AI (best quality)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,8 +50,10 @@ export default function NewMiningJobPage() {
             type: "url",
             input: inputUrl,
             name: name || `Mining Job - ${new Date().toLocaleString()}`,
-            strategy,
-            config: {}
+            strategy: "auto",
+            config: {
+              mining_mode: miningMode
+            }
           }),
         });
       } else {
@@ -182,16 +184,88 @@ export default function NewMiningJobPage() {
                 </p>
               </div>
 
+              {/* Mining Mode Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Strategy</label>
-                <select
-                  value={strategy}
-                  onChange={(e) => setStrategy(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg bg-white"
-                >
-                  <option value="auto">Auto (Smart Detection)</option>
-                  <option value="playwright">Deep Scan (Slower, More Data)</option>
-                </select>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Mining Mode
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  {/* Quick Mode */}
+                  <button
+                    type="button"
+                    onClick={() => setMiningMode("quick")}
+                    className={`relative p-4 rounded-lg border-2 transition-all text-left ${
+                      miningMode === "quick"
+                        ? "border-yellow-500 bg-yellow-50"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <Zap className={`h-6 w-6 mb-2 ${miningMode === "quick" ? "text-yellow-600" : "text-gray-400"}`} />
+                    <div className="font-medium text-sm text-gray-900">Quick</div>
+                    <div className="text-xs text-gray-500 mt-1">~30 seconds</div>
+                    <div className="text-xs text-green-600 font-medium mt-1">Free</div>
+                  </button>
+
+                  {/* Full Mode */}
+                  <button
+                    type="button"
+                    onClick={() => setMiningMode("full")}
+                    className={`relative p-4 rounded-lg border-2 transition-all text-left ${
+                      miningMode === "full"
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <RefreshCw className={`h-6 w-6 mb-2 ${miningMode === "full" ? "text-blue-600" : "text-gray-400"}`} />
+                    <div className="font-medium text-sm text-gray-900">Full</div>
+                    <div className="text-xs text-gray-500 mt-1">~2 minutes</div>
+                    <div className="text-xs text-green-600 font-medium mt-1">Free</div>
+                  </button>
+
+                  {/* AI Mode */}
+                  <button
+                    type="button"
+                    onClick={() => setMiningMode("ai")}
+                    className={`relative p-4 rounded-lg border-2 transition-all text-left ${
+                      miningMode === "ai"
+                        ? "border-purple-500 bg-purple-50 ring-2 ring-purple-200"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    {miningMode === "ai" && (
+                      <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full">
+                        Best
+                      </span>
+                    )}
+                    <Sparkles className={`h-6 w-6 mb-2 ${miningMode === "ai" ? "text-purple-600" : "text-gray-400"}`} />
+                    <div className="font-medium text-sm text-gray-900">AI Powered</div>
+                    <div className="text-xs text-gray-500 mt-1">~1 minute</div>
+                    <div className="text-xs text-purple-600 font-medium mt-1">Best Quality</div>
+                  </button>
+                </div>
+
+                {/* Mode Description */}
+                <div className={`mt-3 p-3 rounded-lg text-sm ${
+                  miningMode === "quick" ? "bg-yellow-50 text-yellow-800" :
+                  miningMode === "full" ? "bg-blue-50 text-blue-800" :
+                  "bg-purple-50 text-purple-800"
+                }`}>
+                  {miningMode === "quick" && (
+                    <>
+                      <strong>Quick Mode:</strong> Basic HTTP scraping. Best for simple HTML pages. May miss JavaScript-rendered content.
+                    </>
+                  )}
+                  {miningMode === "full" && (
+                    <>
+                      <strong>Full Mode:</strong> Runs multiple extraction methods and merges results. Good coverage but may have some data inconsistencies.
+                    </>
+                  )}
+                  {miningMode === "ai" && (
+                    <>
+                      <strong>AI Mode:</strong> Uses Claude AI to intelligently extract and structure data. Highest accuracy with proper company-email-phone matching.
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           ) : (
@@ -272,15 +346,24 @@ export default function NewMiningJobPage() {
             <button
               type="submit"
               disabled={loading}
-              className={`w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+              className={`w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 ${
                 loading 
                   ? "bg-gray-400 cursor-not-allowed" 
                   : jobType === "url" 
-                    ? "bg-orange-600 hover:bg-orange-700 focus:ring-orange-500"
+                    ? miningMode === "ai"
+                      ? "bg-purple-600 hover:bg-purple-700 focus:ring-purple-500"
+                      : "bg-orange-600 hover:bg-orange-700 focus:ring-orange-500"
                     : "bg-blue-600 hover:bg-blue-700 focus:ring-blue-500"
               }`}
             >
-              {loading ? "Starting Job..." : "Start Mining Job"}
+              {loading ? (
+                "Starting Job..."
+              ) : (
+                <>
+                  {jobType === "url" && miningMode === "ai" && <Sparkles className="h-4 w-4" />}
+                  Start Mining Job
+                </>
+              )}
             </button>
           </div>
 
