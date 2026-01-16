@@ -23,6 +23,8 @@ import {
   Trash2,
   Copy,
   ExternalLink,
+  Tag,
+  List,
 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -43,7 +45,7 @@ type MiningResult = {
   city: string | null;
   address: string | null;
   source_url: string | null;
-  confidence_score: number | null; // 0-100
+  confidence_score: number | null;
   verification_status: "unverified" | "valid" | "invalid" | "risky";
   status: "new" | "reviewed" | "imported" | "skipped";
   created_at: string;
@@ -74,48 +76,6 @@ type Summary = {
     risky: number;
   };
 };
-
-// Mock data for development
-const MOCK_RESULTS: MiningResult[] = [
-  {
-    id: "1",
-    job_id: "job_1",
-    company_name: "ABUMET NIGERIA LIMITED",
-    contact_name: "Esther Duruibe",
-    job_title: "Sales Manager",
-    emails: ["esther.duruibe@abumet.com"],
-    website: "https://abumet.com",
-    phone: "+234 803 456 7890",
-    country: "Nigeria",
-    city: "Lagos",
-    address: null,
-    source_url: "https://exhibitors.big5constructnigeria.com/...",
-    confidence_score: 95,
-    verification_status: "valid",
-    status: "new",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    job_id: "job_1",
-    company_name: "ACERO STRUCTURAL STEEL",
-    contact_name: "Damien Mendez",
-    job_title: null,
-    emails: ["damien.mendez@acero.ae", "info@acero.ae"],
-    website: "https://acero.ae",
-    phone: "+971 4 123 4567",
-    country: "UAE",
-    city: "Dubai",
-    address: null,
-    source_url: null,
-    confidence_score: 88,
-    verification_status: "unverified",
-    status: "new",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -237,8 +197,7 @@ export default function MiningJobResultsPage() {
 
   const jobId = useMemo(() => {
     if (typeof rawId === "string") return rawId;
-    if (Array.isArray(rawId) && rawId.length > 0)
-      return rawId[0] as string;
+    if (Array.isArray(rawId) && rawId.length > 0) return rawId[0] as string;
     return "";
   }, [rawId]);
 
@@ -252,11 +211,18 @@ export default function MiningJobResultsPage() {
     Record<string, Partial<MiningResult>>
   >({});
 
+  // Import Modal State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importTags, setImportTags] = useState("");
+  const [createList, setCreateList] = useState(false);
+  const [listName, setListName] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+
   // Filters
   const [search, setSearch] = useState("");
-  const [emailFilter, setEmailFilter] = useState<
-    "all" | "with" | "without"
-  >("all");
+  const [emailFilter, setEmailFilter] = useState<"all" | "with" | "without">(
+    "all"
+  );
   const [statusFilter, setStatusFilter] = useState<
     "all" | "new" | "reviewed" | "imported" | "skipped"
   >("all");
@@ -292,17 +258,20 @@ export default function MiningJobResultsPage() {
         const jobData = await jobRes.json();
         setJob(jobData.job || jobData);
       } else if (jobRes.status === 400 || jobRes.status === 404) {
-        const message =
-          "Job not found or invalid job id. Please check the link and try again.";
-        setError(message);
+        setError(
+          "Job not found or invalid job id. Please check the link and try again."
+        );
         setLoading(false);
         return;
       }
 
       // Fetch results with server-side pagination
-      const res = await fetch(`/api/mining/jobs/${jobId}/results?page=${page}&limit=${ITEMS_PER_PAGE}`, {
-        headers: authHeaders,
-      });
+      const res = await fetch(
+        `/api/mining/jobs/${jobId}/results?page=${page}&limit=${ITEMS_PER_PAGE}`,
+        {
+          headers: authHeaders,
+        }
+      );
 
       const data = await res
         .json()
@@ -318,14 +287,12 @@ export default function MiningJobResultsPage() {
 
       const items: any[] = data.results || data.items || data || [];
 
-      // Set total from server pagination
       if (data.pagination?.total !== undefined) {
         setTotalFromServer(data.pagination.total);
       } else {
         setTotalFromServer(items.length);
       }
 
-      // Transform data if needed (handle backward compatibility)
       const transformedResults: MiningResult[] = items.map((item: any) => ({
         ...item,
         job_id: item.job_id || item.jobId || jobId,
@@ -344,26 +311,18 @@ export default function MiningJobResultsPage() {
         city: item.city || null,
         address: item.address ?? null,
         source_url: item.source_url || item.sourceUrl || null,
-        confidence_score:
-          item.confidence_score ?? item.confidenceScore ?? null,
+        confidence_score: item.confidence_score ?? item.confidenceScore ?? null,
         verification_status: item.verification_status || "unverified",
         status: item.status || "new",
-        created_at: item.created_at || item.createdAt || new Date().toISOString(),
+        created_at:
+          item.created_at || item.createdAt || new Date().toISOString(),
         updated_at: item.updated_at || item.updatedAt || null,
       }));
 
       setResults(transformedResults);
     } catch (err) {
       console.error("Error loading results:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to load results"
-      );
-
-      // Sadece development ortamında mock data göster
-      if (isDev) {
-        setResults(MOCK_RESULTS);
-        setTotalFromServer(MOCK_RESULTS.length);
-      }
+      setError(err instanceof Error ? err.message : "Failed to load results");
     } finally {
       setLoading(false);
     }
@@ -373,12 +332,11 @@ export default function MiningJobResultsPage() {
     fetchResults();
   }, [fetchResults]);
 
-  // Filtre değişince sayfayı başa al
   useEffect(() => {
     setPage(1);
   }, [search, emailFilter, statusFilter, verificationFilter, countryFilter]);
 
-  // Calculate summary from current page results
+  // Calculate summary
   const summary = useMemo((): Summary => {
     const total = results.length;
     const withEmail = results.filter((r) => r.emails.length > 0).length;
@@ -395,14 +353,11 @@ export default function MiningJobResultsPage() {
     };
 
     results.forEach((r) => {
-      // Countries
       const country = r.country || "Unknown";
       countries[country] = (countries[country] || 0) + 1;
 
-      // Verification
       if (r.verification_status === "valid") verificationStats.verified++;
-      else if (r.verification_status === "invalid")
-        verificationStats.invalid++;
+      else if (r.verification_status === "invalid") verificationStats.invalid++;
       else if (r.verification_status === "risky") verificationStats.risky++;
       else verificationStats.unverified++;
     });
@@ -418,27 +373,19 @@ export default function MiningJobResultsPage() {
     };
   }, [results]);
 
-  // Filter results (client-side filtering on current page)
+  // Filter results
   const filteredResults = useMemo(() => {
     return results.filter((r) => {
-      // Email filter
       if (emailFilter === "with" && r.emails.length === 0) return false;
       if (emailFilter === "without" && r.emails.length > 0) return false;
-
-      // Status filter
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
-
-      // Verification filter
       if (
         verificationFilter !== "all" &&
         r.verification_status !== verificationFilter
       )
         return false;
-
-      // Country filter
       if (countryFilter !== "all" && r.country !== countryFilter) return false;
 
-      // Search
       if (search) {
         const searchLower = search.toLowerCase();
         const searchableText = [
@@ -468,13 +415,9 @@ export default function MiningJobResultsPage() {
     search,
   ]);
 
-  // Server handles pagination - no client-side slice needed
   const paginatedResults = filteredResults;
-
-  // Total pages from server
-  const totalPages = totalFromServer === 0
-    ? 1
-    : Math.ceil(totalFromServer / ITEMS_PER_PAGE);
+  const totalPages =
+    totalFromServer === 0 ? 1 : Math.ceil(totalFromServer / ITEMS_PER_PAGE);
 
   // Actions
   const handleSelectAll = () => {
@@ -491,11 +434,7 @@ export default function MiningJobResultsPage() {
     );
   };
 
-  const handleEditCell = (
-    resultId: string,
-    field: string,
-    value: string
-  ) => {
+  const handleEditCell = (resultId: string, field: string, value: string) => {
     setEditedResults((prev) => ({
       ...prev,
       [resultId]: {
@@ -510,7 +449,6 @@ export default function MiningJobResultsPage() {
     if (entries.length === 0) return;
 
     try {
-      // Save edited results to backend
       await Promise.all(
         entries.map(([id, changes]) =>
           fetch(`/api/mining/results/${id}`, {
@@ -524,7 +462,6 @@ export default function MiningJobResultsPage() {
         )
       );
 
-      // Update local state
       setResults((prev) =>
         prev.map((r) => ({
           ...r,
@@ -540,55 +477,60 @@ export default function MiningJobResultsPage() {
     }
   };
 
-  /* ======================================================
-     🔥 UPDATED IMPORT LOGIC - Email olmayan skip, verification opsiyonel
-     ====================================================== */
-  const handleImportToLeads = async () => {
-    if (!jobId || !isValidUuid(jobId)) {
-      alert("Geçersiz job ID – lütfen Mining Jobs sayfasından tekrar deneyin.");
-      return;
-    }
-
-    const selected = results.filter((r) => selectedIds.includes(r.id));
-
-    if (selected.length === 0) {
+  // Open Import Modal
+  const openImportModal = () => {
+    if (selectedIds.length === 0) {
       alert("Please select results to import.");
       return;
     }
 
-    // 🟡 Email olanları ve olmayanları ayır
+    const selected = results.filter((r) => selectedIds.includes(r.id));
     const withEmail = selected.filter((r) => r.emails.length > 0);
-    const withoutEmail = selected.filter((r) => r.emails.length === 0);
-
-    // 🟡 INFO: email olmayanlar skip edilecek
-    if (withoutEmail.length > 0) {
-      alert(
-        `${withoutEmail.length} selected result(s) do not have an email and will be skipped.`
-      );
-    }
 
     if (withEmail.length === 0) {
       alert("No results with email to import.");
       return;
     }
 
-    // 🟡 OPTIONAL verification (non-blocking)
-    const unverified = withEmail.filter(
-      (r) => r.verification_status !== "valid"
-    );
-
-    if (unverified.length > 0) {
-      const choice = confirm(
-        `${unverified.length} email(s) are not verified.\n\nPress OK to continue without verification.\nPress Cancel if you want to verify first.`
-      );
-
-      if (!choice) {
-        return;
-      }
+    // Set default list name from job name
+    if (job?.name) {
+      setListName(job.name);
     }
 
+    setShowImportModal(true);
+  };
+
+  // Handle Import
+  const handleImportToLeads = async () => {
+    if (!jobId || !isValidUuid(jobId)) {
+      alert("Invalid job ID");
+      return;
+    }
+
+    const selected = results.filter((r) => selectedIds.includes(r.id));
+    const withEmail = selected.filter((r) => r.emails.length > 0);
+    const withoutEmail = selected.filter((r) => r.emails.length === 0);
+
+    if (withEmail.length === 0) {
+      alert("No results with email to import.");
+      return;
+    }
+
+    // Validate list name if creating list
+    if (createList && !listName.trim()) {
+      alert("Please enter a list name.");
+      return;
+    }
+
+    setImportLoading(true);
+
     try {
-      // 🔵 IMPORT - Doğrudan lead objesi gönder
+      // Parse tags
+      const tagsArray = importTags
+        .split(",")
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+
       const res = await fetch("/api/leads/import", {
         method: "POST",
         headers: {
@@ -617,6 +559,9 @@ export default function MiningJobResultsPage() {
               confidence_score: r.confidence_score,
             },
           })),
+          tags: tagsArray.length > 0 ? tagsArray : undefined,
+          create_list: createList,
+          list_name: createList ? listName.trim() : undefined,
         }),
       });
 
@@ -627,7 +572,7 @@ export default function MiningJobResultsPage() {
 
       const data = await res.json();
 
-      // 🟢 UI STATUS UPDATE - Sadece email olanları imported yap
+      // Update UI status
       setResults((prev) =>
         prev.map((r) =>
           selectedIds.includes(r.id) && r.emails.length > 0
@@ -636,14 +581,31 @@ export default function MiningJobResultsPage() {
         )
       );
 
-      alert(
-        `✅ Imported ${withEmail.length} lead(s) successfully.\n${withoutEmail.length > 0 ? `⚠️ ${withoutEmail.length} result(s) without email were skipped.` : ""}`
-      );
+      // Build success message
+      let message = `✅ Imported ${withEmail.length} lead(s) successfully.`;
+      if (withoutEmail.length > 0) {
+        message += `\n⚠️ ${withoutEmail.length} result(s) without email were skipped.`;
+      }
+      if (tagsArray.length > 0) {
+        message += `\n🏷️ Tags applied: ${tagsArray.join(", ")}`;
+      }
+      if (data.list_created) {
+        message += `\n📋 List created: "${data.list_created.name}"`;
+      }
 
+      alert(message);
+
+      // Reset modal state
+      setShowImportModal(false);
+      setImportTags("");
+      setCreateList(false);
+      setListName("");
       setSelectedIds([]);
     } catch (err) {
       console.error("Error importing to leads:", err);
       alert(err instanceof Error ? err.message : "Error importing to leads");
+    } finally {
+      setImportLoading(false);
     }
   };
 
@@ -653,35 +615,34 @@ export default function MiningJobResultsPage() {
         ? results.filter((r) => selectedIds.includes(r.id))
         : filteredResults;
 
-    const csv =
+    const csv = [
       [
-        [
-          "Company",
-          "Contact Name",
-          "Job Title",
-          "Emails",
-          "Website",
-          "Phone",
-          "Country",
-          "City",
-          "Confidence",
-          "Verification",
-        ],
-        ...selectedResults.map((r) => [
-          r.company_name || "",
-          r.contact_name || "",
-          r.job_title || "",
-          r.emails.join("; "),
-          r.website || "",
-          r.phone || "",
-          r.country || "",
-          r.city || "",
-          r.confidence_score?.toString() || "",
-          r.verification_status || "",
-        ]),
-      ]
-        .map((row) => row.map((cell) => `"${cell}"`).join(","))
-        .join("\n");
+        "Company",
+        "Contact Name",
+        "Job Title",
+        "Emails",
+        "Website",
+        "Phone",
+        "Country",
+        "City",
+        "Confidence",
+        "Verification",
+      ],
+      ...selectedResults.map((r) => [
+        r.company_name || "",
+        r.contact_name || "",
+        r.job_title || "",
+        r.emails.join("; "),
+        r.website || "",
+        r.phone || "",
+        r.country || "",
+        r.city || "",
+        r.confidence_score?.toString() || "",
+        r.verification_status || "",
+      ]),
+    ]
+      .map((row) => row.map((cell) => `"${cell}"`).join(","))
+      .join("\n");
 
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -693,9 +654,7 @@ export default function MiningJobResultsPage() {
   };
 
   const handleVerifyEmails = async () => {
-    const selectedResults = results.filter((r) =>
-      selectedIds.includes(r.id)
-    );
+    const selectedResults = results.filter((r) => selectedIds.includes(r.id));
     const emailsToVerify = selectedResults.flatMap((r) => r.emails);
 
     if (emailsToVerify.length === 0) {
@@ -724,8 +683,6 @@ export default function MiningJobResultsPage() {
       if (!res.ok) throw new Error("Verification failed");
 
       alert(`Verification started for ${emailsToVerify.length} emails`);
-
-      // Refresh results after a short delay
       setTimeout(fetchResults, 3000);
     } catch (err) {
       console.error("Error starting verification:", err);
@@ -735,7 +692,6 @@ export default function MiningJobResultsPage() {
 
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
-
     if (!confirm(`Delete ${selectedIds.length} selected results?`)) return;
 
     try {
@@ -756,17 +712,13 @@ export default function MiningJobResultsPage() {
     }
   };
 
-  // Website helper: hem URL crash etmesin hem domain gösterelim
   const formatWebsite = (website: string | null | undefined) => {
     if (!website) return null;
-
     let href = website.trim();
     if (!href) return null;
-
     if (!/^https?:\/\//i.test(href)) {
       href = `https://${href}`;
     }
-
     try {
       const url = new URL(href);
       return { href: url.toString(), label: url.hostname };
@@ -775,7 +727,6 @@ export default function MiningJobResultsPage() {
     }
   };
 
-  // Geçersiz / eksik jobId ise erken çık
   if (!jobId || !isValidUuid(jobId)) {
     return (
       <div className="flex flex-col gap-4 p-6">
@@ -797,7 +748,6 @@ export default function MiningJobResultsPage() {
     );
   }
 
-  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -834,7 +784,7 @@ export default function MiningJobResultsPage() {
             Refresh
           </button>
           <button
-            onClick={handleImportToLeads}
+            onClick={openImportModal}
             disabled={selectedIds.length === 0}
             className="px-4 py-1.5 text-sm text-white bg-orange-500 rounded-md hover:bg-orange-600 disabled:opacity-50"
           >
@@ -968,8 +918,8 @@ export default function MiningJobResultsPage() {
       {selectedIds.length > 0 && (
         <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 flex items-center justify-between">
           <span className="text-sm font-medium text-blue-900">
-            {selectedIds.length} result
-            {selectedIds.length > 1 ? "s" : ""} selected
+            {selectedIds.length} result{selectedIds.length > 1 ? "s" : ""}{" "}
+            selected
           </span>
           <div className="flex gap-2">
             {Object.keys(editedResults).length > 0 && (
@@ -1057,7 +1007,6 @@ export default function MiningJobResultsPage() {
                 paginatedResults.map((result) => {
                   const edited = editedResults[result.id];
                   const displayResult = { ...result, ...edited };
-
                   const websiteInfo = formatWebsite(displayResult.website);
 
                   return (
@@ -1136,9 +1085,7 @@ export default function MiningJobResultsPage() {
                         {displayResult.phone ? (
                           <div className="flex items-center gap-1">
                             <Phone className="h-3 w-3 text-gray-400" />
-                            <span className="text-sm">
-                              {displayResult.phone}
-                            </span>
+                            <span className="text-sm">{displayResult.phone}</span>
                           </div>
                         ) : (
                           <span className="text-gray-400">—</span>
@@ -1155,9 +1102,7 @@ export default function MiningJobResultsPage() {
                         </div>
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <ConfidenceScore
-                          score={displayResult.confidence_score}
-                        />
+                        <ConfidenceScore score={displayResult.confidence_score} />
                       </td>
                       <td className="px-3 py-3 text-center">
                         <VerificationBadge
@@ -1227,9 +1172,7 @@ export default function MiningJobResultsPage() {
               <span className="font-medium">
                 {Math.min(page * ITEMS_PER_PAGE, totalFromServer)}
               </span>{" "}
-              of{" "}
-              <span className="font-medium">{totalFromServer}</span>{" "}
-              results
+              of <span className="font-medium">{totalFromServer}</span> results
             </span>
             <div className="flex gap-2">
               <button
@@ -1257,18 +1200,104 @@ export default function MiningJobResultsPage() {
       {/* Help Text */}
       <div className="text-xs text-gray-500">
         <p>
-          💡 Click on company names, contacts, or websites to edit them
-          inline. Your changes will be highlighted and can be saved in bulk.
+          💡 Click on company names, contacts, or websites to edit them inline.
         </p>
         <p>
           📧 Select results and click "Import to Leads" to move them to your
-          leads database.
+          leads database with tags and optional list creation.
         </p>
         <p>
-          ✅ Use "Verify Emails" to validate email addresses before importing
-          (uses verification credits).
+          ✅ Use "Verify Emails" to validate email addresses before importing.
         </p>
       </div>
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-lg font-bold mb-2">Import to Leads</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {selectedIds.length} result(s) selected •{" "}
+              {results.filter((r) => selectedIds.includes(r.id) && r.emails.length > 0).length}{" "}
+              with email
+            </p>
+
+            <div className="space-y-4">
+              {/* Tags Input */}
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  <Tag className="h-4 w-4 inline mr-1" />
+                  Tags (comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={importTags}
+                  onChange={(e) => setImportTags(e.target.value)}
+                  placeholder="e.g. nigeria, construction, 2026"
+                  className="w-full border rounded px-3 py-2 text-sm"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Tags will be added to all imported leads
+                </p>
+              </div>
+
+              {/* Create List Checkbox */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="createList"
+                  checked={createList}
+                  onChange={(e) => setCreateList(e.target.checked)}
+                  className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                />
+                <label htmlFor="createList" className="text-sm font-medium">
+                  <List className="h-4 w-4 inline mr-1" />
+                  Also create a list
+                </label>
+              </div>
+
+              {/* List Name Input (shown when checkbox is checked) */}
+              {createList && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    List Name
+                  </label>
+                  <input
+                    type="text"
+                    value={listName}
+                    onChange={(e) => setListName(e.target.value)}
+                    placeholder="e.g. Nigeria Build Expo 2026"
+                    className="w-full border rounded px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 mt-4 border-t">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportTags("");
+                  setCreateList(false);
+                  setListName("");
+                }}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                disabled={importLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleImportToLeads}
+                disabled={importLoading}
+                className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50"
+              >
+                {importLoading ? "Importing..." : "Import Leads"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
