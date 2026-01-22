@@ -109,9 +109,9 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
   
   // Dynamic counts (fetch from API in real app)
   const [counts, setCounts] = useState({
-    runningJobs: 2,
-    newLeads: 15,
-    activeCampaigns: 3,
+    runningJobs: 0,
+    newLeads: 0,
+    activeCampaigns: 0,
   });
 
   useEffect(() => {
@@ -125,9 +125,9 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
 
     // Fetch dynamic counts (replace with real API calls)
     const fetchCounts = async () => {
-      // const response = await fetch("/api/stats");
-      // const data = await response.json();
-      // setCounts(data);
+      const response = await fetch("/api/stats", { credentials: "include" });
+      const data = await response.json(); if (response.ok) setCounts(data);
+      
     };
     
     fetchCounts();
