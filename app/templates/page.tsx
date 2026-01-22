@@ -346,7 +346,7 @@ export default function TemplatesPage() {
                         placeholder="<p>Hello {{name}},</p><p>Your email content here...</p>"
                       ></textarea>
                       <p className="mt-1 text-xs text-gray-500">
-                        Available placeholders: {{first_name}}, {{last_name}}, {{company_name}}, {{email}}, {{country}}, {{position}}, {{website}}, {{tag}}
+                        Available placeholders: {"{{"}first_name{"}}"}, {"{{"}last_name{"}}"}, {"{{"}company_name{"}}"}, {"{{"}email{"}}"}, {"{{"}country{"}}"}, {"{{"}position{"}}"}, {"{{"}website{"}}"}, {"{{"}tag{"}}"}
                       </p>
                     </div>
                   </div>
