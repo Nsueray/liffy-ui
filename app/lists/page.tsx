@@ -186,6 +186,50 @@ export default function ListsPage() {
     }
   };
 
+  const handleCreateEmpty = async () => {
+    if (!newListName.trim()) {
+      setCreateError('List name is required');
+      return;
+    }
+
+    setCreateLoading(true);
+    setCreateError(null);
+
+    try {
+      const token = localStorage.getItem('liffy_token');
+      const res = await fetch('/api/lists/create-empty', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ name: newListName.trim() })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create list');
+      }
+
+      setLists(prev => [{
+        id: data.id || '',
+        name: data.name || newListName.trim(),
+        created_at: data.created_at || new Date().toISOString(),
+        total_leads: 0,
+        verified_count: 0,
+        unverified_count: 0
+      }, ...prev]);
+
+      resetCreateModal();
+    } catch (e: any) {
+      setCreateError(e.message);
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+
   const handleCreate = async () => {
     if (!newListName.trim()) {
       setCreateError('List name is required');
@@ -613,6 +657,13 @@ export default function ListsPage() {
                   disabled={previewLoading || createLoading}
                 >
                   {previewLoading ? 'Counting...' : 'Preview Leads'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleCreateEmpty}
+                  disabled={createLoading || !newListName.trim()}
+                >
+                  Create Empty
                 </Button>
                 <Button
                   onClick={handleCreate}
