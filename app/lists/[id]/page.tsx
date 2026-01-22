@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
@@ -38,6 +39,21 @@ export default function ListDetailPage() {
   const [list, setList] = useState<ListDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Add Leads Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addTab, setAddTab] = useState<'manual' | 'import'>('manual');
+  const [manualEmail, setManualEmail] = useState('');
+  const [manualName, setManualName] = useState('');
+  const [manualCompany, setManualCompany] = useState('');
+  const [manualCountry, setManualCountry] = useState('');
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addSuccess, setAddSuccess] = useState<string | null>(null);
+
+  // Import State
+  const [importText, setImportText] = useState('');
+  const [importResult, setImportResult] = useState<{imported: number; skipped: number; total: number} | null>(null);
 
   const fetchList = useCallback(async () => {
     if (!listId) return;
@@ -106,6 +122,134 @@ export default function ListDetailPage() {
     } catch (e: any) {
       alert(e.message);
     }
+  };
+
+  const handleAddManual = async () => {
+    if (!manualEmail.trim() || !manualEmail.includes('@')) {
+      setAddError('Valid email is required');
+      return;
+    }
+
+    setAddLoading(true);
+    setAddError(null);
+    setAddSuccess(null);
+
+    try {
+      const token = localStorage.getItem('liffy_token');
+      const res = await fetch(`/api/lists/${listId}/add-manual`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          email: manualEmail.trim(),
+          name: manualName.trim() || null,
+          company: manualCompany.trim() || null,
+          country: manualCountry.trim() || null
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to add prospect');
+      }
+
+      setAddSuccess(`Added ${manualEmail.trim()}`);
+      setManualEmail('');
+      setManualName('');
+      setManualCompany('');
+      setManualCountry('');
+      
+      // Refresh list
+      fetchList();
+    } catch (e: any) {
+      setAddError(e.message);
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
+  const handleImportBulk = async () => {
+    if (!importText.trim()) {
+      setAddError('Please paste email data');
+      return;
+    }
+
+    setAddLoading(true);
+    setAddError(null);
+    setAddSuccess(null);
+    setImportResult(null);
+
+    try {
+      // Parse CSV/text - support multiple formats
+      const lines = importText.trim().split('\n').filter(line => line.trim());
+      const prospects: {email: string; name?: string; company?: string; country?: string}[] = [];
+
+      for (const line of lines) {
+        // Try to parse as CSV (comma or tab separated)
+        const parts = line.includes('\t') ? line.split('\t') : line.split(',');
+        const email = parts[0]?.trim();
+        
+        if (email && email.includes('@')) {
+          prospects.push({
+            email,
+            name: parts[1]?.trim() || undefined,
+            company: parts[2]?.trim() || undefined,
+            country: parts[3]?.trim() || undefined
+          });
+        }
+      }
+
+      if (prospects.length === 0) {
+        throw new Error('No valid emails found. Format: email, name, company, country (one per line)');
+      }
+
+      const token = localStorage.getItem('liffy_token');
+      const res = await fetch(`/api/lists/${listId}/import-bulk`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ prospects })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to import');
+      }
+
+      setImportResult({
+        imported: data.imported,
+        skipped: data.skipped,
+        total: data.total
+      });
+      setAddSuccess(`Imported ${data.imported} of ${data.total} prospects`);
+      setImportText('');
+      
+      // Refresh list
+      fetchList();
+    } catch (e: any) {
+      setAddError(e.message);
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
+  const resetAddModal = () => {
+    setShowAddModal(false);
+    setAddTab('manual');
+    setManualEmail('');
+    setManualName('');
+    setManualCompany('');
+    setManualCountry('');
+    setImportText('');
+    setAddError(null);
+    setAddSuccess(null);
+    setImportResult(null);
   };
 
   const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
@@ -186,6 +330,9 @@ export default function ListDetailPage() {
             Created on {formatDate(list.created_at)}
           </p>
         </div>
+        <Button onClick={() => setShowAddModal(true)}>
+          + Add Leads
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -219,9 +366,12 @@ export default function ListDetailPage() {
                 </svg>
               </div>
               <h3 className="font-medium text-gray-900 mb-1">No leads in this list</h3>
-              <p className="text-sm text-muted-foreground">
-                This list is empty. Create a new list with filters to add leads.
+              <p className="text-sm text-muted-foreground mb-4">
+                Add leads manually or import from CSV.
               </p>
+              <Button onClick={() => setShowAddModal(true)}>
+                + Add Leads
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -267,6 +417,136 @@ export default function ListDetailPage() {
             </TableBody>
           </Table>
         </Card>
+      )}
+
+      {/* Add Leads Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={resetAddModal} />
+          <div className="relative bg-white rounded-lg shadow-lg w-full max-w-xl p-6 mx-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-semibold mb-1">Add Leads to List</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Add leads manually or import from CSV/Excel.
+            </p>
+
+            {/* Tabs */}
+            <div className="flex gap-2 mb-4 border-b">
+              <button
+                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+                  addTab === 'manual' 
+                    ? 'border-orange-500 text-orange-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+                onClick={() => setAddTab('manual')}
+              >
+                Manual Entry
+              </button>
+              <button
+                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+                  addTab === 'import' 
+                    ? 'border-orange-500 text-orange-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+                onClick={() => setAddTab('import')}
+              >
+                Bulk Import
+              </button>
+            </div>
+
+            {addError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-sm text-red-600">{addError}</p>
+              </div>
+            )}
+
+            {addSuccess && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                <p className="text-sm text-green-600">{addSuccess}</p>
+              </div>
+            )}
+
+            {addTab === 'manual' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="email"
+                    placeholder="email@example.com"
+                    value={manualEmail}
+                    onChange={(e) => setManualEmail(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <Input
+                    placeholder="John Doe"
+                    value={manualName}
+                    onChange={(e) => setManualName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+                  <Input
+                    placeholder="Acme Corp"
+                    value={manualCompany}
+                    onChange={(e) => setManualCompany(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                  <Input
+                    placeholder="Germany"
+                    value={manualCountry}
+                    onChange={(e) => setManualCountry(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {addTab === 'import' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Paste CSV Data
+                  </label>
+                  <textarea
+                    className="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring font-mono"
+                    placeholder="email@example.com, John Doe, Acme Corp, Germany
+another@email.com, Jane Smith, Tech Inc, USA
+..."
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Format: email, name, company, country (one per line). Only email is required.
+                  </p>
+                </div>
+
+                {importResult && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <p className="text-sm text-blue-800">
+                      <strong>{importResult.imported}</strong> imported, <strong>{importResult.skipped}</strong> skipped (of {importResult.total} total)
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+              <Button variant="ghost" onClick={resetAddModal} disabled={addLoading}>
+                Cancel
+              </Button>
+              <Button
+                onClick={addTab === 'manual' ? handleAddManual : handleImportBulk}
+                disabled={addLoading}
+              >
+                {addLoading ? 'Adding...' : addTab === 'manual' ? 'Add Lead' : 'Import All'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
