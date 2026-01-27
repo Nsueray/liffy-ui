@@ -25,7 +25,6 @@ import {
   ExternalLink,
   Tag,
   List,
-  Upload,
 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -76,16 +75,6 @@ type Summary = {
     invalid: number;
     risky: number;
   };
-};
-
-type ImportPreview = {
-  job_id: string;
-  job_name: string;
-  total_results: number;
-  with_email: number;
-  importable: number;
-  already_imported: number;
-  without_email: number;
 };
 
 const UUID_REGEX =
@@ -224,12 +213,10 @@ export default function MiningJobResultsPage() {
 
   // Import Modal State
   const [showImportModal, setShowImportModal] = useState(false);
-  const [importMode, setImportMode] = useState<"selected" | "all">("selected");
   const [importTags, setImportTags] = useState("");
   const [createList, setCreateList] = useState(false);
   const [listName, setListName] = useState("");
   const [importLoading, setImportLoading] = useState(false);
-  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
 
   // Filters
   const [search, setSearch] = useState("");
@@ -490,23 +477,8 @@ export default function MiningJobResultsPage() {
     }
   };
 
-  // Fetch import preview for "Import All"
-  const fetchImportPreview = async () => {
-    try {
-      const res = await fetch(`/api/mining/jobs/${jobId}/import-preview`, {
-        headers: getAuthHeaders() ?? {},
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setImportPreview(data);
-      }
-    } catch (err) {
-      console.error("Error fetching import preview:", err);
-    }
-  };
-
-  // Open Import Modal - Selected
-  const openImportModalSelected = () => {
+  // Open Import Modal
+  const openImportModal = () => {
     if (selectedIds.length === 0) {
       alert("Please select results to import.");
       return;
@@ -520,26 +492,16 @@ export default function MiningJobResultsPage() {
       return;
     }
 
-    setImportMode("selected");
+    // Set default list name from job name
     if (job?.name) {
       setListName(job.name);
     }
+
     setShowImportModal(true);
   };
 
-  // Open Import Modal - All
-  const openImportModalAll = async () => {
-    setImportMode("all");
-    await fetchImportPreview();
-    
-    if (job?.name) {
-      setListName(job.name);
-    }
-    setShowImportModal(true);
-  };
-
-  // Handle Import Selected (existing logic)
-  const handleImportSelected = async () => {
+  // Handle Import
+  const handleImportToLeads = async () => {
     if (!jobId || !isValidUuid(jobId)) {
       alert("Invalid job ID");
       return;
@@ -554,6 +516,7 @@ export default function MiningJobResultsPage() {
       return;
     }
 
+    // Validate list name if creating list
     if (createList && !listName.trim()) {
       alert("Please enter a list name.");
       return;
@@ -562,6 +525,7 @@ export default function MiningJobResultsPage() {
     setImportLoading(true);
 
     try {
+      // Parse tags
       const tagsArray = importTags
         .split(",")
         .map((t) => t.trim())
@@ -608,6 +572,7 @@ export default function MiningJobResultsPage() {
 
       const data = await res.json();
 
+      // Update UI status
       setResults((prev) =>
         prev.map((r) =>
           selectedIds.includes(r.id) && r.emails.length > 0
@@ -616,6 +581,7 @@ export default function MiningJobResultsPage() {
         )
       );
 
+      // Build success message
       let message = `✅ Imported ${withEmail.length} lead(s) successfully.`;
       if (withoutEmail.length > 0) {
         message += `\n⚠️ ${withoutEmail.length} result(s) without email were skipped.`;
@@ -629,6 +595,7 @@ export default function MiningJobResultsPage() {
 
       alert(message);
 
+      // Reset modal state
       setShowImportModal(false);
       setImportTags("");
       setCreateList(false);
@@ -639,90 +606,6 @@ export default function MiningJobResultsPage() {
       alert(err instanceof Error ? err.message : "Error importing to leads");
     } finally {
       setImportLoading(false);
-    }
-  };
-
-  // Handle Import All (NEW)
-  const handleImportAll = async () => {
-    if (!jobId || !isValidUuid(jobId)) {
-      alert("Invalid job ID");
-      return;
-    }
-
-    if (createList && !listName.trim()) {
-      alert("Please enter a list name.");
-      return;
-    }
-
-    setImportLoading(true);
-
-    try {
-      const tagsArray = importTags
-        .split(",")
-        .map((t) => t.trim())
-        .filter((t) => t.length > 0);
-
-      const res = await fetch(`/api/mining/jobs/${jobId}/import-all`, {
-        method: "POST",
-        headers: {
-          ...(getAuthHeaders() ?? {}),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          tags: tagsArray,
-          create_list: createList,
-          list_name: createList ? listName.trim() : undefined,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData?.error || "Import failed");
-      }
-
-      const data = await res.json();
-
-      // Build success message
-      let message = `✅ ${data.message}`;
-      message += `\n\n📊 Stats:`;
-      message += `\n• Total with email: ${data.stats.total_with_email}`;
-      message += `\n• Imported: ${data.stats.imported}`;
-      message += `\n• New prospects: ${data.stats.new_prospects}`;
-      message += `\n• Duplicates updated: ${data.stats.duplicates_updated}`;
-      
-      if (data.tags_applied?.length > 0) {
-        message += `\n\n🏷️ Tags applied: ${data.tags_applied.join(", ")}`;
-      }
-      
-      if (data.list_created) {
-        message += `\n\n📋 List created: "${data.list_created.name}" (${data.list_created.member_count} members)`;
-      }
-
-      alert(message);
-
-      // Refresh results to show updated status
-      fetchResults();
-
-      setShowImportModal(false);
-      setImportTags("");
-      setCreateList(false);
-      setListName("");
-      setSelectedIds([]);
-      setImportPreview(null);
-    } catch (err) {
-      console.error("Error importing all:", err);
-      alert(err instanceof Error ? err.message : "Error importing leads");
-    } finally {
-      setImportLoading(false);
-    }
-  };
-
-  // Combined import handler
-  const handleImport = () => {
-    if (importMode === "all") {
-      handleImportAll();
-    } else {
-      handleImportSelected();
     }
   };
 
@@ -900,24 +783,13 @@ export default function MiningJobResultsPage() {
             <RefreshCw className="h-4 w-4 mr-1 inline" />
             Refresh
           </button>
-          
-          {/* Import All Button - NEW */}
           <button
-            onClick={openImportModalAll}
-            className="px-4 py-1.5 text-sm text-white bg-green-600 rounded-md hover:bg-green-700"
-          >
-            <Upload className="h-4 w-4 mr-1 inline" />
-            Import All
-          </button>
-          
-          {/* Import Selected Button */}
-          <button
-            onClick={openImportModalSelected}
+            onClick={openImportModal}
             disabled={selectedIds.length === 0}
             className="px-4 py-1.5 text-sm text-white bg-orange-500 rounded-md hover:bg-orange-600 disabled:opacity-50"
           >
             <UserPlus className="h-4 w-4 mr-1 inline" />
-            Import Selected ({selectedIds.length})
+            Import to Leads ({selectedIds.length})
           </button>
         </div>
       </div>
@@ -1331,44 +1203,24 @@ export default function MiningJobResultsPage() {
           💡 Click on company names, contacts, or websites to edit them inline.
         </p>
         <p>
-          📧 Use <strong>"Import All"</strong> to import all results with email in one click, or select specific results and use "Import Selected".
+          📧 Select results and click "Import to Leads" to move them to your
+          leads database with tags and optional list creation.
         </p>
         <p>
           ✅ Use "Verify Emails" to validate email addresses before importing.
         </p>
       </div>
 
-      {/* Import Modal - Updated for both modes */}
+      {/* Import Modal */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
-            <h3 className="text-lg font-bold mb-2">
-              {importMode === "all" ? "Import All to Leads" : "Import to Leads"}
-            </h3>
-            
-            {/* Preview Stats for Import All */}
-            {importMode === "all" && importPreview && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <div className="text-sm font-medium text-green-800 mb-2">
-                  📊 Import Preview
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>Total results: <strong>{importPreview.total_results}</strong></div>
-                  <div>With email: <strong className="text-green-600">{importPreview.with_email}</strong></div>
-                  <div>Importable: <strong className="text-blue-600">{importPreview.importable}</strong></div>
-                  <div>Already imported: <strong className="text-gray-500">{importPreview.already_imported}</strong></div>
-                </div>
-              </div>
-            )}
-            
-            {/* Stats for Selected Mode */}
-            {importMode === "selected" && (
-              <p className="text-sm text-gray-500 mb-4">
-                {selectedIds.length} result(s) selected •{" "}
-                {results.filter((r) => selectedIds.includes(r.id) && r.emails.length > 0).length}{" "}
-                with email
-              </p>
-            )}
+            <h3 className="text-lg font-bold mb-2">Import to Leads</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {selectedIds.length} result(s) selected •{" "}
+              {results.filter((r) => selectedIds.includes(r.id) && r.emails.length > 0).length}{" "}
+              with email
+            </p>
 
             <div className="space-y-4">
               {/* Tags Input */}
@@ -1404,7 +1256,7 @@ export default function MiningJobResultsPage() {
                 </label>
               </div>
 
-              {/* List Name Input */}
+              {/* List Name Input (shown when checkbox is checked) */}
               {createList && (
                 <div>
                   <label className="block text-sm font-medium mb-1">
@@ -1429,7 +1281,6 @@ export default function MiningJobResultsPage() {
                   setImportTags("");
                   setCreateList(false);
                   setListName("");
-                  setImportPreview(null);
                 }}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
                 disabled={importLoading}
@@ -1437,20 +1288,11 @@ export default function MiningJobResultsPage() {
                 Cancel
               </button>
               <button
-                onClick={handleImport}
-                disabled={importLoading || (importMode === "all" && importPreview?.importable === 0)}
-                className={`px-4 py-2 text-white rounded disabled:opacity-50 ${
-                  importMode === "all" 
-                    ? "bg-green-600 hover:bg-green-700" 
-                    : "bg-orange-500 hover:bg-orange-600"
-                }`}
+                onClick={handleImportToLeads}
+                disabled={importLoading}
+                className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50"
               >
-                {importLoading 
-                  ? "Importing..." 
-                  : importMode === "all" 
-                    ? `Import All (${importPreview?.importable || 0})` 
-                    : "Import Selected"
-                }
+                {importLoading ? "Importing..." : "Import Leads"}
               </button>
             </div>
           </div>
