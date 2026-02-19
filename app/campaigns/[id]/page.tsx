@@ -3,6 +3,16 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import Link from "next/link";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 
 interface Campaign {
   id: string;
@@ -33,6 +43,55 @@ interface CampaignStats {
   bounced: number;
 }
 
+interface AnalyticsSummary {
+  sent: number;
+  delivered: number;
+  opens: number;
+  clicks: number;
+  bounces: number;
+  spam_reports: number;
+  unsubscribes: number;
+  replies: number;
+  dropped: number;
+  deferred: number;
+  delivery_rate: number;
+  open_rate: number;
+  click_rate: number;
+  bounce_rate: number;
+  spam_rate: number;
+  unsubscribe_rate: number;
+}
+
+interface TimelineEntry {
+  period: string;
+  sent?: number;
+  delivered?: number;
+  open?: number;
+  click?: number;
+  bounce?: number;
+  [key: string]: string | number | undefined;
+}
+
+interface TopLink {
+  url: string;
+  clicks: number;
+}
+
+interface BounceBreakdown {
+  hard: number;
+  soft: number;
+  unknown: number;
+  total: number;
+}
+
+interface AnalyticsData {
+  campaign: any;
+  summary: AnalyticsSummary;
+  timeline: TimelineEntry[];
+  top_links: TopLink[];
+  bounce_breakdown: BounceBreakdown;
+}
+
 interface Recipient {
   id: string;
   email: string;
@@ -52,6 +111,7 @@ export default function CampaignDetailPage() {
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [stats, setStats] = useState<CampaignStats | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +125,7 @@ export default function CampaignDetailPage() {
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://api.liffy.app";
   const getToken = () => typeof window !== "undefined" ? localStorage.getItem("liffy_token") : null;
 
-  // Fetch campaign details and stats
+  // Fetch campaign details, stats, and analytics
   const fetchCampaign = useCallback(async () => {
     const token = getToken();
     if (!token || !campaignId) return;
@@ -75,7 +135,7 @@ export default function CampaignDetailPage() {
       const campRes = await fetch(`${apiBase}/api/campaigns/${campaignId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
+
       if (!campRes.ok) {
         if (campRes.status === 404) {
           router.push('/campaigns');
@@ -83,18 +143,28 @@ export default function CampaignDetailPage() {
         }
         throw new Error('Failed to fetch campaign');
       }
-      
+
       const campData = await campRes.json();
       setCampaign(campData);
 
-      // Fetch stats
+      // Fetch simple stats
       const statsRes = await fetch(`${apiBase}/api/campaigns/${campaignId}/stats`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
+
       if (statsRes.ok) {
         const statsData = await statsRes.json();
         setStats(statsData.stats);
+      }
+
+      // Fetch analytics
+      const analyticsRes = await fetch(`${apiBase}/api/campaigns/${campaignId}/analytics`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (analyticsRes.ok) {
+        const analyticsData: AnalyticsData = await analyticsRes.json();
+        setAnalytics(analyticsData);
       }
 
     } catch (err: any) {
@@ -110,7 +180,7 @@ export default function CampaignDetailPage() {
     try {
       const offset = (currentPage - 1) * pageSize;
       let url = `${apiBase}/api/campaigns/${campaignId}/recipients?limit=${pageSize}&offset=${offset}`;
-      
+
       if (statusFilter !== "all") {
         url += `&status=${statusFilter}`;
       }
@@ -148,12 +218,19 @@ export default function CampaignDetailPage() {
 
   function formatDate(dateStr?: string | null) {
     if (!dateStr) return "-";
-    return new Date(dateStr).toLocaleDateString("en-US", { 
-      month: "short", 
-      day: "numeric", 
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
       year: "numeric",
-      hour: "2-digit", 
-      minute: "2-digit" 
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  function formatShortDate(dateStr: string) {
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
     });
   }
 
@@ -174,6 +251,7 @@ export default function CampaignDetailPage() {
     const styles: Record<string, string> = {
       draft: "bg-gray-100 text-gray-800",
       ready: "bg-blue-100 text-blue-800",
+      scheduled: "bg-cyan-100 text-cyan-800",
       sending: "bg-green-100 text-green-800",
       paused: "bg-orange-100 text-orange-800",
       completed: "bg-purple-100 text-purple-800",
@@ -187,7 +265,10 @@ export default function CampaignDetailPage() {
   if (loading) {
     return (
       <div className="p-8">
-        <div className="animate-pulse">Loading campaign details...</div>
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="h-8 w-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-3" />
+          <p className="text-gray-500">Loading campaign details...</p>
+        </div>
       </div>
     );
   }
@@ -199,11 +280,19 @@ export default function CampaignDetailPage() {
           {error || "Campaign not found"}
         </div>
         <Link href="/campaigns" className="text-blue-600 hover:underline mt-4 inline-block">
-          ← Back to Campaigns
+          &larr; Back to Campaigns
         </Link>
       </div>
     );
   }
+
+  const summary = analytics?.summary;
+
+  // Prepare timeline data for chart
+  const timelineData = (analytics?.timeline || []).map(entry => ({
+    ...entry,
+    date: formatShortDate(entry.period),
+  }));
 
   return (
     <div className="space-y-6 p-6">
@@ -211,7 +300,7 @@ export default function CampaignDetailPage() {
       <div className="flex items-center justify-between">
         <div>
           <Link href="/campaigns" className="text-blue-600 hover:underline text-sm mb-2 inline-block">
-            ← Back to Campaigns
+            &larr; Back to Campaigns
           </Link>
           <h2 className="text-3xl font-bold">{campaign.name}</h2>
           <div className="flex items-center gap-3 mt-2">
@@ -219,6 +308,9 @@ export default function CampaignDetailPage() {
               {campaign.status}
             </span>
             <span className="text-gray-500 text-sm">Created {formatDate(campaign.created_at)}</span>
+            {campaign.started_at && (
+              <span className="text-gray-500 text-sm">Started {formatDate(campaign.started_at)}</span>
+            )}
           </div>
         </div>
       </div>
@@ -227,7 +319,7 @@ export default function CampaignDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border p-4">
           <p className="text-sm text-gray-500">Template</p>
-          <p className="font-medium">{campaign.template_name || campaign.template_subject || "-"}</p>
+          <p className="font-medium truncate">{campaign.template_name || campaign.template_subject || "-"}</p>
         </div>
         <div className="bg-white rounded-lg border p-4">
           <p className="text-sm text-gray-500">List</p>
@@ -235,7 +327,7 @@ export default function CampaignDetailPage() {
         </div>
         <div className="bg-white rounded-lg border p-4">
           <p className="text-sm text-gray-500">Sender</p>
-          <p className="font-medium">{campaign.sender_email || "-"}</p>
+          <p className="font-medium truncate">{campaign.sender_email || "-"}</p>
         </div>
         <div className="bg-white rounded-lg border p-4">
           <p className="text-sm text-gray-500">Total Recipients</p>
@@ -243,39 +335,237 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-          <div className="bg-white rounded-lg border p-4 text-center">
-            <p className="text-2xl font-bold text-gray-800">{stats.pending}</p>
-            <p className="text-sm text-gray-500">Pending</p>
+      {/* Analytics Summary Cards */}
+      {summary ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Sent */}
+          <div className="bg-white rounded-lg border p-5">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-medium text-gray-500">Sent</p>
+              <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                {summary.delivery_rate}% delivered
+              </span>
+            </div>
+            <p className="text-3xl font-bold text-gray-900">{summary.sent.toLocaleString()}</p>
+            <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+              <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(summary.delivery_rate, 100)}%` }} />
+            </div>
           </div>
+
+          {/* Opened */}
+          <div className="bg-white rounded-lg border p-5">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-medium text-gray-500">Opened</p>
+              <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                {summary.open_rate}%
+              </span>
+            </div>
+            <p className="text-3xl font-bold text-green-600">{summary.opens.toLocaleString()}</p>
+            <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+              <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${Math.min(summary.open_rate, 100)}%` }} />
+            </div>
+          </div>
+
+          {/* Clicked */}
+          <div className="bg-white rounded-lg border p-5">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-medium text-gray-500">Clicked</p>
+              <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                {summary.click_rate}%
+              </span>
+            </div>
+            <p className="text-3xl font-bold text-purple-600">{summary.clicks.toLocaleString()}</p>
+            <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+              <div className="bg-purple-500 h-1.5 rounded-full" style={{ width: `${Math.min(summary.click_rate, 100)}%` }} />
+            </div>
+          </div>
+
+          {/* Bounced */}
+          <div className="bg-white rounded-lg border p-5">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-medium text-gray-500">Bounced</p>
+              <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                {summary.bounce_rate}%
+              </span>
+            </div>
+            <p className="text-3xl font-bold text-red-500">{summary.bounces.toLocaleString()}</p>
+            <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+              <div className="bg-red-500 h-1.5 rounded-full" style={{ width: `${Math.min(summary.bounce_rate, 100)}%` }} />
+            </div>
+          </div>
+        </div>
+      ) : stats && (
+        /* Fallback to simple stats if analytics not available */
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-lg border p-4 text-center">
             <p className="text-2xl font-bold text-blue-600">{stats.sent}</p>
             <p className="text-sm text-gray-500">Sent</p>
           </div>
           <div className="bg-white rounded-lg border p-4 text-center">
-            <p className="text-2xl font-bold text-green-600">{stats.delivered}</p>
-            <p className="text-sm text-gray-500">Delivered</p>
-          </div>
-          <div className="bg-white rounded-lg border p-4 text-center">
-            <p className="text-2xl font-bold text-purple-600">{stats.opened}</p>
+            <p className="text-2xl font-bold text-green-600">{stats.opened}</p>
             <p className="text-sm text-gray-500">Opened</p>
           </div>
           <div className="bg-white rounded-lg border p-4 text-center">
-            <p className="text-2xl font-bold text-indigo-600">{stats.clicked}</p>
+            <p className="text-2xl font-bold text-purple-600">{stats.clicked}</p>
             <p className="text-sm text-gray-500">Clicked</p>
           </div>
           <div className="bg-white rounded-lg border p-4 text-center">
-            <p className="text-2xl font-bold text-red-600">{stats.failed}</p>
-            <p className="text-sm text-gray-500">Failed</p>
-          </div>
-          <div className="bg-white rounded-lg border p-4 text-center">
-            <p className="text-2xl font-bold text-orange-600">{stats.bounced}</p>
+            <p className="text-2xl font-bold text-red-600">{stats.bounced}</p>
             <p className="text-sm text-gray-500">Bounced</p>
           </div>
         </div>
       )}
+
+      {/* Secondary Stats Row */}
+      {summary && (summary.spam_reports > 0 || summary.unsubscribes > 0 || summary.replies > 0 || summary.deferred > 0) && (
+        <div className="flex flex-wrap gap-3">
+          {summary.replies > 0 && (
+            <div className="flex items-center gap-2 bg-white rounded-lg border px-4 py-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-sm text-gray-600">Replies: <span className="font-semibold">{summary.replies}</span></span>
+            </div>
+          )}
+          {summary.deferred > 0 && (
+            <div className="flex items-center gap-2 bg-white rounded-lg border px-4 py-2">
+              <span className="w-2 h-2 rounded-full bg-yellow-500" />
+              <span className="text-sm text-gray-600">Deferred: <span className="font-semibold">{summary.deferred}</span></span>
+            </div>
+          )}
+          {summary.spam_reports > 0 && (
+            <div className="flex items-center gap-2 bg-white rounded-lg border px-4 py-2">
+              <span className="w-2 h-2 rounded-full bg-red-500" />
+              <span className="text-sm text-gray-600">Spam Reports: <span className="font-semibold">{summary.spam_reports}</span> ({summary.spam_rate}%)</span>
+            </div>
+          )}
+          {summary.unsubscribes > 0 && (
+            <div className="flex items-center gap-2 bg-white rounded-lg border px-4 py-2">
+              <span className="w-2 h-2 rounded-full bg-gray-500" />
+              <span className="text-sm text-gray-600">Unsubscribes: <span className="font-semibold">{summary.unsubscribes}</span> ({summary.unsubscribe_rate}%)</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Timeline Chart */}
+      {timelineData.length > 1 && (
+        <div className="bg-white rounded-lg border shadow-sm p-6">
+          <h3 className="font-semibold mb-4">Engagement Timeline</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={timelineData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="sent" name="Sent" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="open" name="Opened" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="click" name="Clicked" fill="#a855f7" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="bounce" name="Bounced" fill="#ef4444" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Top Links & Bounce Breakdown side by side */}
+      {(analytics?.top_links?.length || analytics?.bounce_breakdown?.total) ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Top Links */}
+          {analytics.top_links.length > 0 && (
+            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+              <div className="p-4 border-b">
+                <h3 className="font-semibold">Top Clicked Links</h3>
+              </div>
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">URL</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Clicks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {analytics.top_links.map((link, i) => (
+                    <tr key={i} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-blue-600 max-w-xs truncate">
+                        <a href={link.url} target="_blank" rel="noopener noreferrer" className="hover:underline" title={link.url}>
+                          {link.url.length > 60 ? link.url.substring(0, 57) + '...' : link.url}
+                        </a>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{link.clicks}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Bounce Breakdown */}
+          {analytics.bounce_breakdown && analytics.bounce_breakdown.total > 0 && (
+            <div className="bg-white rounded-lg border shadow-sm p-6">
+              <h3 className="font-semibold mb-4">Bounce Breakdown</h3>
+              <div className="space-y-4">
+                {/* Visual bar */}
+                <div className="flex rounded-full overflow-hidden h-4">
+                  {analytics.bounce_breakdown.hard > 0 && (
+                    <div
+                      className="bg-red-500 transition-all"
+                      style={{ width: `${(analytics.bounce_breakdown.hard / analytics.bounce_breakdown.total) * 100}%` }}
+                      title={`Hard: ${analytics.bounce_breakdown.hard}`}
+                    />
+                  )}
+                  {analytics.bounce_breakdown.soft > 0 && (
+                    <div
+                      className="bg-orange-400 transition-all"
+                      style={{ width: `${(analytics.bounce_breakdown.soft / analytics.bounce_breakdown.total) * 100}%` }}
+                      title={`Soft: ${analytics.bounce_breakdown.soft}`}
+                    />
+                  )}
+                  {analytics.bounce_breakdown.unknown > 0 && (
+                    <div
+                      className="bg-gray-300 transition-all"
+                      style={{ width: `${(analytics.bounce_breakdown.unknown / analytics.bounce_breakdown.total) * 100}%` }}
+                      title={`Unknown: ${analytics.bounce_breakdown.unknown}`}
+                    />
+                  )}
+                </div>
+
+                {/* Legend */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded bg-red-500" />
+                      <span className="text-sm text-gray-600">Hard Bounce</span>
+                    </div>
+                    <span className="text-sm font-semibold">{analytics.bounce_breakdown.hard}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded bg-orange-400" />
+                      <span className="text-sm text-gray-600">Soft Bounce</span>
+                    </div>
+                    <span className="text-sm font-semibold">{analytics.bounce_breakdown.soft}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded bg-gray-300" />
+                      <span className="text-sm text-gray-600">Unknown</span>
+                    </div>
+                    <span className="text-sm font-semibold">{analytics.bounce_breakdown.unknown}</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">Total Bounces</span>
+                    <span className="text-lg font-bold text-red-600">{analytics.bounce_breakdown.total}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {/* Recipients Table */}
       <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
@@ -283,8 +573,8 @@ export default function CampaignDetailPage() {
           <h3 className="font-semibold">Recipients</h3>
           <div className="flex items-center gap-2">
             <label className="text-sm text-gray-500">Filter:</label>
-            <select 
-              value={statusFilter} 
+            <select
+              value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
               className="border rounded px-2 py-1 text-sm"
             >
