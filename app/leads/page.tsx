@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -95,6 +96,7 @@ const VERIFICATION_STATUSES = [
 ];
 
 export default function ContactsPage() {
+  const router = useRouter();
   const [persons, setPersons] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -430,7 +432,7 @@ export default function ContactsPage() {
                     <TableRow
                       key={person.id}
                       className="cursor-pointer hover:bg-orange-50/50"
-                      onClick={() => openDetail(person.id)}
+                      onClick={() => router.push(`/leads/${person.id}`)}
                     >
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
