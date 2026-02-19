@@ -14,7 +14,18 @@ interface Campaign {
   sender_id?: string | null;
   recipient_count?: number | null;
   scheduled_at?: string | null;
+  verification_mode?: string;
   created_at: string;
+}
+
+interface ResolveStats {
+  total_in_list: number;
+  excluded_invalid: number;
+  excluded_risky: number;
+  excluded_unverified: number;
+  excluded_unsubscribed: number;
+  eligible: number;
+  inserted: number;
 }
 
 interface EmailTemplate { id: string; name: string; subject: string; }
@@ -42,6 +53,14 @@ export default function CampaignsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   
+  // Resolve Modal States
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [resolveTarget, setResolveTarget] = useState<Campaign | null>(null);
+  const [resolveLoading, setResolveLoading] = useState(false);
+  const [resolveMode, setResolveMode] = useState<string>("exclude_invalid");
+  const [resolveStats, setResolveStats] = useState<ResolveStats | null>(null);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+
   // Form Inputs
   const [newCampaignName, setNewCampaignName] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -93,7 +112,7 @@ export default function CampaignsPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // --- ACTIONS ---
-  async function handleAction(campaignId: string, action: "resolve" | "start" | "pause" | "resume") {
+  async function handleAction(campaignId: string, action: "start" | "pause" | "resume") {
     const token = getToken();
     if (!token) return;
 
@@ -116,6 +135,51 @@ export default function CampaignsPage() {
     } finally {
       setActionLoading(null);
     }
+  }
+
+  // --- RESOLVE ---
+  function openResolveModal(campaign: Campaign) {
+    setResolveTarget(campaign);
+    setResolveMode(campaign.verification_mode || "exclude_invalid");
+    setResolveStats(null);
+    setResolveError(null);
+    setShowResolveModal(true);
+  }
+
+  async function handleResolve() {
+    if (!resolveTarget) return;
+    const token = getToken();
+    if (!token) return;
+
+    setResolveLoading(true);
+    setResolveError(null);
+
+    try {
+      const res = await fetch(`${apiBase}/api/campaigns/${resolveTarget.id}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ verification_mode: resolveMode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to resolve campaign");
+
+      setResolveStats(data.stats || null);
+
+      if (data.campaign) {
+        setCampaigns((prev) => prev.map((c) => (c.id === resolveTarget.id ? { ...c, ...data.campaign } : c)));
+      }
+    } catch (err: any) {
+      setResolveError(err.message);
+    } finally {
+      setResolveLoading(false);
+    }
+  }
+
+  function closeResolveModal() {
+    setShowResolveModal(false);
+    setResolveTarget(null);
+    setResolveStats(null);
+    setResolveError(null);
   }
 
   // --- DELETE ---
@@ -267,11 +331,10 @@ export default function CampaignsPage() {
                             {/* DRAFT -> RESOLVE */}
                             {c.status === 'draft' && (
                                 <button
-                                    onClick={() => handleAction(c.id, 'resolve')}
-                                    disabled={actionLoading === c.id}
-                                    className="text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+                                    onClick={() => openResolveModal(c)}
+                                    className="text-blue-600 hover:text-blue-800 font-medium"
                                 >
-                                    {actionLoading === c.id ? "Resolving..." : "Resolve Audience"}
+                                    Resolve Audience
                                 </button>
                             )}
                             
@@ -375,6 +438,106 @@ export default function CampaignsPage() {
                     </button>
                 </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* RESOLVE MODAL */}
+      {showResolveModal && resolveTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-lg font-bold mb-1">Resolve Audience</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Configure verification filtering for <strong>{resolveTarget.name}</strong>.
+            </p>
+
+            {resolveError && <div className="bg-red-50 text-red-600 p-2 text-sm rounded mb-4">{resolveError}</div>}
+
+            {!resolveStats ? (
+              <>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-1">Verification Mode</label>
+                  <select
+                    className="w-full border rounded px-3 py-2"
+                    value={resolveMode}
+                    onChange={e => setResolveMode(e.target.value)}
+                    disabled={resolveLoading}
+                  >
+                    <option value="exclude_invalid">Send to all (exclude invalid)</option>
+                    <option value="verified_only">Send only to verified emails</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {resolveMode === "verified_only"
+                      ? "Only emails with 'valid' or 'catch-all' verification status will be included."
+                      : "All emails except 'invalid' will be included. Unverified emails are sent."}
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4 border-t">
+                  <button
+                    type="button"
+                    onClick={closeResolveModal}
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                    disabled={resolveLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleResolve}
+                    disabled={resolveLoading}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {resolveLoading ? "Resolving..." : "Resolve"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2 mb-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Total in list</span>
+                    <span className="font-medium">{resolveStats.total_in_list}</span>
+                  </div>
+                  {resolveStats.excluded_invalid > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-red-600">Excluded (invalid)</span>
+                      <span className="font-medium text-red-600">-{resolveStats.excluded_invalid}</span>
+                    </div>
+                  )}
+                  {resolveStats.excluded_risky > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-orange-600">Excluded (risky)</span>
+                      <span className="font-medium text-orange-600">-{resolveStats.excluded_risky}</span>
+                    </div>
+                  )}
+                  {resolveStats.excluded_unverified > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Excluded (unverified)</span>
+                      <span className="font-medium text-gray-500">-{resolveStats.excluded_unverified}</span>
+                    </div>
+                  )}
+                  {resolveStats.excluded_unsubscribed > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-yellow-600">Excluded (unsubscribed)</span>
+                      <span className="font-medium text-yellow-600">-{resolveStats.excluded_unsubscribed}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm pt-2 border-t font-semibold">
+                    <span className="text-green-700">Recipients added</span>
+                    <span className="text-green-700">{resolveStats.inserted}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t">
+                  <button
+                    onClick={closeResolveModal}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
