@@ -73,11 +73,17 @@ export function LayoutClient({ children }: Props) {
     router.push("/login");
   }, [router]);
 
+  // Route-to-title mapping for renamed pages
+  const routeTitles: Record<string, string> = {
+    '/leads': 'Contacts',
+    '/prospects': 'Prospects',
+  };
+
   // Get page title from pathname
   const getPageTitle = () => {
     const segments = pathname.split("/").filter(Boolean);
     if (segments.length === 0) return "Dashboard";
-    
+
     // Special cases
     if (pathname.startsWith("/mining/jobs/new")) return "New Mining Job";
     if (pathname.startsWith("/mining/jobs/") && segments.length > 2) {
@@ -86,10 +92,23 @@ export function LayoutClient({ children }: Props) {
       return "Mining Job Details";
     }
     if (pathname === "/mining/jobs") return "Mining Jobs";
-    
+
+    // Explicit route titles
+    if (routeTitles[pathname]) return routeTitles[pathname];
+
     // Default: capitalize last segment
     const lastSegment = segments[segments.length - 1];
     return lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1);
+  };
+
+  // Breadcrumb: map path segments to display names
+  const getBreadcrumb = () => {
+    const segmentLabels: Record<string, string> = { leads: 'Contacts', prospects: 'Prospects' };
+    return pathname
+      .split("/")
+      .filter(Boolean)
+      .map(s => segmentLabels[s] || s)
+      .join(" / ");
   };
 
   return (
@@ -143,7 +162,7 @@ export function LayoutClient({ children }: Props) {
                   <>
                     <span>/</span>
                     <span className="text-gray-700 dark:text-gray-300">
-                      {pathname.split("/").filter(Boolean).join(" / ")}
+                      {getBreadcrumb()}
                     </span>
                   </>
                 )}

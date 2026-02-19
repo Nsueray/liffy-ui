@@ -115,6 +115,7 @@ export default function ContactsPage() {
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PersonDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const getToken = () => localStorage.getItem('liffy_token');
 
@@ -191,6 +192,7 @@ export default function ContactsPage() {
   const openDetail = async (personId: string) => {
     setSelectedPersonId(personId);
     setDetail(null);
+    setDetailError(null);
     setDetailLoading(true);
 
     try {
@@ -199,12 +201,33 @@ export default function ContactsPage() {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to fetch person detail');
+      if (!res.ok) {
+        const errBody = await res.text();
+        let errMsg = `HTTP ${res.status}`;
+        try { errMsg = JSON.parse(errBody).error || errMsg; } catch {}
+        throw new Error(errMsg);
+      }
 
-      const data: PersonDetail = await res.json();
-      setDetail(data);
-    } catch (err) {
+      const data = await res.json();
+
+      // Handle both { person, affiliations, ... } and flat response
+      if (data.person) {
+        setDetail(data as PersonDetail);
+      } else if (data.id && data.email) {
+        // Flat response — wrap it
+        setDetail({
+          person: data,
+          affiliations: data.affiliations || [],
+          intents: data.intents || [],
+          engagement: data.engagement || [],
+          zoho_pushes: data.zoho_pushes || []
+        });
+      } else {
+        throw new Error('Unexpected response format');
+      }
+    } catch (err: any) {
       console.error('Failed to load person detail', err);
+      setDetailError(err.message || 'Failed to load contact details');
     } finally {
       setDetailLoading(false);
     }
@@ -475,7 +498,7 @@ export default function ContactsPage() {
       {selectedPersonId && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-black/40" onClick={closeDetail} />
-          <div className="relative w-full max-w-lg bg-white shadow-xl overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-white shadow-xl overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
               <h2 className="text-lg font-semibold">Contact Detail</h2>
               <button
@@ -492,7 +515,24 @@ export default function ContactsPage() {
               </div>
             )}
 
-            {detail && (
+            {!detailLoading && detailError && (
+              <div className="p-6">
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600 font-medium">Failed to load contact</p>
+                  <p className="text-xs text-red-500 mt-1">{detailError}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => openDetail(selectedPersonId)}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {!detailLoading && detail && (
               <div className="p-6 space-y-6">
                 {/* Person Header */}
                 <div>
