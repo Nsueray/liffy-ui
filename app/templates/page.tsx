@@ -305,7 +305,7 @@ export default function TemplatesPage() {
             </button>
           </div>
         ) : (
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -329,7 +329,7 @@ export default function TemplatesPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {template.name}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
                       {template.subject}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
