@@ -313,12 +313,6 @@ export default function MiningJobDetailPage() {
               </h2>
               <div className="mt-3 space-y-2">
                 <Link
-                  href={`/mining/jobs/${job.id}/console`}
-                  className="block w-full rounded-md border border-gray-300 px-3 py-2 text-center text-sm font-medium hover:bg-gray-50"
-                >
-                  View Live Console
-                </Link>
-                <Link
                   href={`/mining/jobs/${job.id}/results`}
                   className="block w-full rounded-md border border-gray-300 px-3 py-2 text-center text-sm font-medium hover:bg-gray-50"
                 >

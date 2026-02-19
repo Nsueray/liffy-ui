@@ -883,7 +883,7 @@ export default function MiningJobResultsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.push(`/mining/jobs/${jobId}/console`)}
+            onClick={() => router.push(`/mining/jobs`)}
             className="p-2 hover:bg-gray-100 rounded-lg"
           >
             <ChevronLeft className="h-5 w-5" />
