@@ -441,17 +441,25 @@ export default function TemplatesPage() {
                       />
                       <div className="mt-2 flex items-center gap-1 flex-wrap">
                         <span className="text-xs text-gray-400 mr-1">Insert:</span>
-                        {['{{first_name}}', '{{last_name}}', '{{company_name}}', '{{email}}', '{{country}}', '{{position}}', '{{website}}', '{{tag}}'].map(p => (
+                        {['{{display_name}}', '{{first_name}}', '{{last_name}}', '{{company_name}}', '{{email}}', '{{country}}', '{{position}}', '{{website}}', '{{tag}}'].map(p => (
                           <button
                             key={p}
                             type="button"
                             onClick={() => insertPlaceholder(p)}
-                            className="px-1.5 py-0.5 text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100 transition-colors"
+                            className={`px-1.5 py-0.5 text-xs border rounded hover:bg-orange-100 transition-colors ${
+                              p === '{{display_name}}'
+                                ? 'text-green-700 bg-green-50 border-green-200 hover:bg-green-100'
+                                : 'text-orange-600 bg-orange-50 border-orange-200'
+                            }`}
+                            title={p === '{{display_name}}' ? 'Auto: first_name → company → "Valued Partner"' : undefined}
                           >
                             {p}
                           </button>
                         ))}
                       </div>
+                      <p className="mt-1 text-[10px] text-gray-400">
+                        Tip: Use pipe fallbacks like {'{{first_name|company_name|"Friend"}}'} — tries each field, uses first non-empty value.
+                      </p>
                     </div>
                   </div>
 
