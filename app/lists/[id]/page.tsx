@@ -185,10 +185,22 @@ export default function ListDetailPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to queue verification');
 
-      const queued = data.queued || data.queued_count || 0;
-      toast.success(`${queued} email${queued !== 1 ? 's' : ''} queued for verification`);
-      setVerifyPolling(true);
-      fetchQueueStatus();
+      const queued = data.queued || 0;
+      const alreadyVerified = data.already_verified || 0;
+      const alreadyInQueue = data.already_in_queue || 0;
+
+      const parts: string[] = [];
+      if (alreadyVerified > 0) parts.push(`${alreadyVerified} already verified`);
+      if (alreadyInQueue > 0) parts.push(`${alreadyInQueue} already in queue`);
+      const suffix = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+
+      if (queued > 0) {
+        toast.success(`${queued} email${queued !== 1 ? 's' : ''} queued for verification${suffix}`);
+        setVerifyPolling(true);
+        fetchQueueStatus();
+      } else {
+        toast.success(`No new emails to verify${suffix}`);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to queue verification';
       toast.error(msg);
