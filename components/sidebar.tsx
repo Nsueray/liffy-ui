@@ -123,16 +123,25 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
       setCollapsed(JSON.parse(savedState));
     }
 
-    // Fetch dynamic counts (replace with real API calls)
+    // Fetch dynamic counts
     const fetchCounts = async () => {
-      const response = await fetch("/api/stats", { credentials: "include" });
-      const data = await response.json(); if (response.ok) setCounts(data);
-      
+      const token = localStorage.getItem('liffy_token');
+      if (!token) return;
+
+      try {
+        const response = await fetch("/api/stats", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCounts(data);
+        }
+      } catch {}
     };
-    
+
     fetchCounts();
-    const interval = setInterval(fetchCounts, 30000); // Update every 30s
-    
+    const interval = setInterval(fetchCounts, 30000);
+
     return () => clearInterval(interval);
   }, []);
 
