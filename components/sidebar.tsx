@@ -31,6 +31,7 @@ import {
   Mail,
   Activity,
   ShieldCheck,
+  BarChart3,
 } from "lucide-react";
 import { logoutClient } from "@/lib/auth";
 
@@ -81,11 +82,17 @@ const menuItems = [
     description: "Email campaigns",
     badge: { type: "warning", count: 0 }
   },
-  { 
-    name: "Templates", 
-    href: "/templates", 
+  {
+    name: "Templates",
+    href: "/templates",
     icon: FileText,
     description: "Email templates"
+  },
+  {
+    name: "Reports",
+    href: "/reports",
+    icon: BarChart3,
+    description: "Campaign reports"
   },
 ];
 
