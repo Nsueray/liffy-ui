@@ -682,21 +682,25 @@ export default function MiningJobResultsPage() {
 
       const data = await res.json();
 
-      // Build success message
-      let message = `✅ ${data.message}`;
-      message += `\n\n📊 Stats:`;
-      message += `\n• Total with email: ${data.stats.total_with_email}`;
-      message += `\n• Imported: ${data.stats.imported}`;
-      message += `\n• New prospects: ${data.stats.new_prospects}`;
-      message += `\n• Duplicates updated: ${data.stats.duplicates_updated}`;
-      
+      // Build success message — 202 means background processing, stats come from preview
+      let message = `${data.message}`;
+
+      if (importPreview) {
+        message += `\n\nImport preview: ${importPreview.importable} importable out of ${importPreview.with_email} with email`;
+        if (importPreview.already_imported > 0) {
+          message += ` (${importPreview.already_imported} already imported)`;
+        }
+      }
+
       if (data.tags_applied?.length > 0) {
-        message += `\n\n🏷️ Tags applied: ${data.tags_applied.join(", ")}`;
+        message += `\n\nTags applied: ${data.tags_applied.join(", ")}`;
       }
-      
+
       if (data.list_created) {
-        message += `\n\n📋 List created: "${data.list_created.name}" (${data.list_created.member_count} members)`;
+        message += `\nList created: "${data.list_created.name}" (${data.list_created.member_count} members)`;
       }
+
+      message += `\n\nRefresh the page to check import progress.`;
 
       alert(message);
 
