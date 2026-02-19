@@ -7,7 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
+import { ShieldCheck } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface ListMember {
   id: string;
@@ -28,6 +31,16 @@ interface ListDetail {
   verified_count: number;
   unverified_count: number;
   members: ListMember[];
+  import_status?: string;
+  import_progress?: Record<string, unknown>;
+}
+
+interface QueueStatus {
+  pending: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  total: number;
 }
 
 export default function ListDetailPage() {
@@ -55,6 +68,14 @@ export default function ListDetailPage() {
   const [importText, setImportText] = useState('');
   const [importResult, setImportResult] = useState<{imported: number; skipped: number; total: number} | null>(null);
 
+  // Verification State
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [hasZeroBounceKey, setHasZeroBounceKey] = useState<boolean | null>(null);
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
+  const [verifyPolling, setVerifyPolling] = useState(false);
+
+  const getToken = () => localStorage.getItem('liffy_token');
+
   const fetchList = useCallback(async () => {
     if (!listId) return;
 
@@ -62,7 +83,7 @@ export default function ListDetailPage() {
     setError(null);
 
     try {
-      const token = localStorage.getItem('liffy_token');
+      const token = getToken();
       const res = await fetch(`/api/lists/${listId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -82,24 +103,105 @@ export default function ListDetailPage() {
         total_leads: Number(data.total_leads) || 0,
         verified_count: Number(data.verified_count) || 0,
         unverified_count: Number(data.unverified_count) || 0,
-        members: Array.isArray(data.members) ? data.members : []
+        members: Array.isArray(data.members) ? data.members : [],
+        import_status: data.import_status,
+        import_progress: data.import_progress
       });
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to fetch list';
+      setError(msg);
     } finally {
       setLoading(false);
     }
   }, [listId]);
 
+  // Check if ZeroBounce key is configured
+  const checkZeroBounceKey = useCallback(async () => {
+    try {
+      const token = getToken();
+      const res = await fetch('/api/settings', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHasZeroBounceKey(!!data.has_zerobounce_key);
+      }
+    } catch {
+      setHasZeroBounceKey(false);
+    }
+  }, []);
+
+  // Fetch queue status for this list
+  const fetchQueueStatus = useCallback(async () => {
+    try {
+      const token = getToken();
+      const res = await fetch(`/api/verification/queue-status?list_id=${listId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data: QueueStatus = await res.json();
+        setQueueStatus(data);
+
+        // Stop polling if no pending/processing items remain
+        if (data.pending === 0 && data.processing === 0) {
+          setVerifyPolling(false);
+          // Refresh list to update verification badges
+          fetchList();
+        }
+      }
+    } catch {
+      // silent fail on status polling
+    }
+  }, [listId, fetchList]);
+
   useEffect(() => {
     fetchList();
-  }, [fetchList]);
+    checkZeroBounceKey();
+  }, [fetchList, checkZeroBounceKey]);
+
+  // Poll queue status when verification is active
+  useEffect(() => {
+    if (!verifyPolling) return;
+    fetchQueueStatus();
+    const interval = setInterval(fetchQueueStatus, 5000);
+    return () => clearInterval(interval);
+  }, [verifyPolling, fetchQueueStatus]);
+
+  const handleVerifyAll = async () => {
+    const token = getToken();
+    if (!token) return;
+
+    setVerifyLoading(true);
+    try {
+      const res = await fetch('/api/verification/verify-list', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ list_id: listId })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to queue verification');
+
+      const queued = data.queued || data.queued_count || 0;
+      toast.success(`${queued} email${queued !== 1 ? 's' : ''} queued for verification`);
+      setVerifyPolling(true);
+      fetchQueueStatus();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to queue verification';
+      toast.error(msg);
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
 
   const handleRemoveMember = async (prospectId: string) => {
     if (!confirm('Remove this lead from the list?')) return;
 
     try {
-      const token = localStorage.getItem('liffy_token');
+      const token = getToken();
       const res = await fetch(`/api/lists/${listId}/members/${prospectId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
@@ -119,8 +221,9 @@ export default function ListDetailPage() {
           unverified_count: newMembers.length - newVerified
         };
       });
-    } catch (e: any) {
-      alert(e.message);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to remove member';
+      alert(msg);
     }
   };
 
@@ -135,7 +238,7 @@ export default function ListDetailPage() {
     setAddSuccess(null);
 
     try {
-      const token = localStorage.getItem('liffy_token');
+      const token = getToken();
       const res = await fetch(`/api/lists/${listId}/add-manual`, {
         method: 'POST',
         headers: {
@@ -161,11 +264,12 @@ export default function ListDetailPage() {
       setManualName('');
       setManualCompany('');
       setManualCountry('');
-      
+
       // Refresh list
       fetchList();
-    } catch (e: any) {
-      setAddError(e.message);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to add prospect';
+      setAddError(msg);
     } finally {
       setAddLoading(false);
     }
@@ -191,7 +295,7 @@ export default function ListDetailPage() {
         // Try to parse as CSV (comma or tab separated)
         const parts = line.includes('\t') ? line.split('\t') : line.split(',');
         const email = parts[0]?.trim();
-        
+
         if (email && email.includes('@')) {
           prospects.push({
             email,
@@ -206,7 +310,7 @@ export default function ListDetailPage() {
         throw new Error('No valid emails found. Format: email, name, company, country (one per line)');
       }
 
-      const token = localStorage.getItem('liffy_token');
+      const token = getToken();
       const res = await fetch(`/api/lists/${listId}/import-bulk`, {
         method: 'POST',
         headers: {
@@ -229,11 +333,12 @@ export default function ListDetailPage() {
       });
       setAddSuccess(`Imported ${data.imported} of ${data.total} prospects`);
       setImportText('');
-      
+
       // Refresh list
       fetchList();
-    } catch (e: any) {
-      setAddError(e.message);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to import';
+      setAddError(msg);
     } finally {
       setAddLoading(false);
     }
@@ -250,6 +355,18 @@ export default function ListDetailPage() {
     setAddError(null);
     setAddSuccess(null);
     setImportResult(null);
+  };
+
+  const getStatusBadgeClass = (status: string): string => {
+    switch (status) {
+      case 'valid': return 'bg-green-100 text-green-800 hover:bg-green-100';
+      case 'invalid': return 'bg-red-100 text-red-800 hover:bg-red-100';
+      case 'catchall': return 'bg-amber-100 text-amber-800 hover:bg-amber-100';
+      case 'unknown': return 'bg-gray-100 text-gray-800 hover:bg-gray-100';
+      case 'pending': return 'bg-blue-100 text-blue-800 hover:bg-blue-100';
+      case 'processing': return 'bg-purple-100 text-purple-800 hover:bg-purple-100';
+      default: return 'bg-gray-100 text-gray-600 hover:bg-gray-100';
+    }
   };
 
   const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
@@ -274,6 +391,16 @@ export default function ListDetailPage() {
       return '-';
     }
   };
+
+  // Compute verification breakdown from members
+  const verificationBreakdown = list ? (() => {
+    const counts: Record<string, number> = {};
+    for (const m of list.members) {
+      const status = m.verification_status || 'unverified';
+      counts[status] = (counts[status] || 0) + 1;
+    }
+    return counts;
+  })() : {};
 
   if (loading) {
     return (
@@ -330,12 +457,45 @@ export default function ListDetailPage() {
             Created on {formatDate(list.created_at)}
           </p>
         </div>
-        <Button onClick={() => setShowAddModal(true)}>
-          + Add Leads
-        </Button>
+        <div className="flex items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="outline"
+                    onClick={handleVerifyAll}
+                    disabled={verifyLoading || hasZeroBounceKey === false || list.total_leads === 0}
+                  >
+                    {verifyLoading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
+                        Queuing...
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4" />
+                        Verify All Emails
+                      </span>
+                    )}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {hasZeroBounceKey === false && (
+                <TooltipContent>
+                  <p>Configure ZeroBounce API key in Settings first</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          <Button onClick={() => setShowAddModal(true)}>
+            + Add Leads
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Total Leads</p>
@@ -350,11 +510,72 @@ export default function ListDetailPage() {
         </Card>
         <Card>
           <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Invalid</p>
+            <p className="text-2xl font-semibold text-red-600">{formatNumber(verificationBreakdown['invalid'] || 0)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Unverified</p>
             <p className="text-2xl font-semibold text-gray-500">{formatNumber(list.unverified_count)}</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Verification Progress (shown when polling) */}
+      {(verifyPolling || (queueStatus && (queueStatus.pending > 0 || queueStatus.processing > 0))) && queueStatus && (
+        <Card className="border-blue-200 bg-blue-50/50">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <span className="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                Verification in Progress
+              </h3>
+              <span className="text-xs text-muted-foreground">Auto-refreshing every 5s</span>
+            </div>
+            <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden flex">
+              {queueStatus.completed > 0 && (
+                <div
+                  className="bg-green-500 h-full transition-all duration-500"
+                  style={{ width: `${(queueStatus.completed / queueStatus.total) * 100}%` }}
+                />
+              )}
+              {queueStatus.processing > 0 && (
+                <div
+                  className="bg-purple-500 h-full transition-all duration-500"
+                  style={{ width: `${(queueStatus.processing / queueStatus.total) * 100}%` }}
+                />
+              )}
+              {queueStatus.failed > 0 && (
+                <div
+                  className="bg-red-500 h-full transition-all duration-500"
+                  style={{ width: `${(queueStatus.failed / queueStatus.total) * 100}%` }}
+                />
+              )}
+              {queueStatus.pending > 0 && (
+                <div
+                  className="bg-blue-200 h-full transition-all duration-500"
+                  style={{ width: `${(queueStatus.pending / queueStatus.total) * 100}%` }}
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Completed ({queueStatus.completed})
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-purple-500 inline-block" /> Processing ({queueStatus.processing})
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Failed ({queueStatus.failed})
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-200 inline-block" /> Pending ({queueStatus.pending})
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {list.members.length === 0 ? (
         <Card>
@@ -384,7 +605,7 @@ export default function ListDetailPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead>Country</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Verification</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -397,8 +618,8 @@ export default function ListDetailPage() {
                   <TableCell>{member.company || <span className="text-muted-foreground">-</span>}</TableCell>
                   <TableCell>{member.country || <span className="text-muted-foreground">-</span>}</TableCell>
                   <TableCell>
-                    <Badge variant={getStatusVariant(member.verification_status)}>
-                      {member.verification_status || 'pending'}
+                    <Badge className={getStatusBadgeClass(member.verification_status || 'unverified')}>
+                      {member.verification_status || 'unverified'}
                     </Badge>
                   </TableCell>
                   <TableCell>{member.source_type || <span className="text-muted-foreground">-</span>}</TableCell>
@@ -433,8 +654,8 @@ export default function ListDetailPage() {
             <div className="flex gap-2 mb-4 border-b">
               <button
                 className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-                  addTab === 'manual' 
-                    ? 'border-orange-500 text-orange-600' 
+                  addTab === 'manual'
+                    ? 'border-orange-500 text-orange-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
                 onClick={() => setAddTab('manual')}
@@ -443,8 +664,8 @@ export default function ListDetailPage() {
               </button>
               <button
                 className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-                  addTab === 'import' 
-                    ? 'border-orange-500 text-orange-600' 
+                  addTab === 'import'
+                    ? 'border-orange-500 text-orange-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
                 onClick={() => setAddTab('import')}

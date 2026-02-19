@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import toast from 'react-hot-toast';
 
 interface QueueStatus {
   pending: number;
@@ -30,6 +31,13 @@ interface ProcessResult {
     sub_status?: string;
     error?: string;
   }>;
+}
+
+interface ListItem {
+  id: string;
+  name: string;
+  total_leads: number;
+  verified_count: number;
 }
 
 const getStatusBadgeClass = (status: string): string => {
@@ -72,6 +80,12 @@ export default function VerificationPage() {
 
   // Batch size
   const [batchSize, setBatchSize] = useState('50');
+
+  // List verification
+  const [lists, setLists] = useState<ListItem[]>([]);
+  const [listsLoading, setListsLoading] = useState(false);
+  const [selectedListId, setSelectedListId] = useState('');
+  const [listVerifyLoading, setListVerifyLoading] = useState(false);
 
   const getToken = () => localStorage.getItem('liffy_token');
 
@@ -123,6 +137,28 @@ export default function VerificationPage() {
       setCreditsError(msg);
     } finally {
       setCreditsLoading(false);
+    }
+  }, []);
+
+  // Fetch lists
+  const fetchLists = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+
+    setListsLoading(true);
+    try {
+      const res = await fetch('/api/lists', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setLists(Array.isArray(data.lists) ? data.lists : []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setListsLoading(false);
     }
   }, []);
 
@@ -198,10 +234,45 @@ export default function VerificationPage() {
     }
   };
 
+  // Verify list
+  const handleVerifyList = async () => {
+    if (!selectedListId) return;
+
+    const token = getToken();
+    if (!token) return;
+
+    setListVerifyLoading(true);
+    try {
+      const res = await fetch('/api/verification/verify-list', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ list_id: selectedListId })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to queue list verification');
+
+      const queued = data.queued || data.queued_count || 0;
+      const listName = lists.find(l => l.id === selectedListId)?.name || 'list';
+      toast.success(`${queued} email${queued !== 1 ? 's' : ''} from "${listName}" queued for verification`);
+      setSelectedListId('');
+      fetchQueueStatus();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to queue list verification';
+      toast.error(msg);
+    } finally {
+      setListVerifyLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchQueueStatus();
     fetchCredits();
-  }, [fetchQueueStatus, fetchCredits]);
+    fetchLists();
+  }, [fetchQueueStatus, fetchCredits, fetchLists]);
 
   // Auto-refresh queue status every 15s
   useEffect(() => {
@@ -295,8 +366,8 @@ export default function VerificationPage() {
         </Card>
       )}
 
-      {/* Single Verify + Batch Process Side by Side */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Single Verify + Verify a List + Batch Process */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Single Email Verify */}
         <Card>
           <CardContent className="pt-6">
@@ -349,6 +420,45 @@ export default function VerificationPage() {
                 <p className="text-sm text-red-600">{verifyError}</p>
               )}
             </form>
+          </CardContent>
+        </Card>
+
+        {/* Verify a List */}
+        <Card>
+          <CardContent className="pt-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Verify a List</h3>
+            <p className="text-sm text-muted-foreground mb-3">
+              Queue all emails from a list for verification. The worker processes them automatically.
+            </p>
+            <div className="space-y-3">
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={selectedListId}
+                onChange={(e) => setSelectedListId(e.target.value)}
+                disabled={listsLoading}
+              >
+                <option value="">
+                  {listsLoading ? 'Loading lists...' : 'Select a list'}
+                </option>
+                {lists.map(l => (
+                  <option key={l.id} value={l.id}>
+                    {l.name} ({l.total_leads} leads, {l.verified_count} verified)
+                  </option>
+                ))}
+              </select>
+              <Button
+                onClick={handleVerifyList}
+                disabled={listVerifyLoading || !selectedListId}
+                className="w-full"
+              >
+                {listVerifyLoading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Queuing...
+                  </span>
+                ) : 'Start Verification'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -503,7 +613,7 @@ export default function VerificationPage() {
               </div>
               <h3 className="font-medium text-gray-900 mb-1">No emails in queue</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Verify a single email above, or upload a CSV list to automatically queue emails for verification.
+                Verify a single email above, select a list to verify, or upload a CSV list to automatically queue emails for verification.
               </p>
             </div>
           </CardContent>
