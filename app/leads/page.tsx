@@ -88,6 +88,7 @@ interface ZohoPush {
 }
 
 const VERIFICATION_STATUSES = [
+  { value: 'exclude_invalid', label: 'Exclude Invalid' },
   { value: '', label: 'All Statuses' },
   { value: 'valid', label: 'Valid' },
   { value: 'invalid', label: 'Invalid' },
@@ -106,7 +107,7 @@ export default function ContactsPage() {
   const [total, setTotal] = useState(0);
 
   const [search, setSearch] = useState('');
-  const [verificationStatus, setVerificationStatus] = useState('');
+  const [verificationStatus, setVerificationStatus] = useState('exclude_invalid');
   const [country, setCountry] = useState('');
   const [company, setCompany] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -241,11 +242,11 @@ export default function ContactsPage() {
   };
 
   const totalPages = Math.ceil(total / limit);
-  const hasActiveFilters = search || verificationStatus || country || company;
+  const hasActiveFilters = search || (verificationStatus && verificationStatus !== 'exclude_invalid') || country || company;
 
   const clearFilters = () => {
     setSearch('');
-    setVerificationStatus('');
+    setVerificationStatus('exclude_invalid');
     setCountry('');
     setCompany('');
   };
