@@ -30,6 +30,7 @@ import {
   Sparkles,
   Mail,
   Activity,
+  ShieldCheck,
 } from "lucide-react";
 import { logoutClient } from "@/lib/auth";
 
@@ -67,9 +68,15 @@ const menuItems = [
     icon: Target,
     description: "Qualified prospects"
   },
-  { 
-    name: "Campaigns", 
-    href: "/campaigns", 
+  {
+    name: "Verification",
+    href: "/verification",
+    icon: ShieldCheck,
+    description: "Email verification"
+  },
+  {
+    name: "Campaigns",
+    href: "/campaigns",
     icon: Send,
     description: "Email campaigns",
     badge: { type: "warning", count: 0 }
