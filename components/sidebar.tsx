@@ -48,11 +48,11 @@ const menuItems = [
     description: "Data extraction jobs",
     badge: { type: "info", count: 0 } // Will be updated dynamically
   },
-  { 
-    name: "Leads", 
-    href: "/leads", 
+  {
+    name: "Contacts",
+    href: "/leads",
     icon: Users,
-    description: "Manage your leads",
+    description: "Manage contacts",
     badge: { type: "success", count: 0 }
   },
   { 
@@ -152,7 +152,7 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
     if (item.name === "Mining Jobs" && counts.runningJobs > 0) {
       return { ...item, badge: { type: "info", count: counts.runningJobs } };
     }
-    if (item.name === "Leads" && counts.newLeads > 0) {
+    if (item.name === "Contacts" && counts.newLeads > 0) {
       return { ...item, badge: { type: "success", count: counts.newLeads } };
     }
     if (item.name === "Campaigns" && counts.activeCampaigns > 0) {
