@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 interface EmailTemplate {
@@ -11,6 +11,68 @@ interface EmailTemplate {
   body_text: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// --- Rich Text Toolbar Component ---
+function RichTextToolbar({ editorRef }: { editorRef: React.RefObject<HTMLDivElement | null> }) {
+  const exec = (command: string, value?: string) => {
+    editorRef.current?.focus();
+    document.execCommand(command, false, value);
+  };
+
+  const handleLink = () => {
+    const url = prompt('Enter URL:', 'https://');
+    if (url) {
+      exec('createLink', url);
+    }
+  };
+
+  const handleFontSize = (size: string) => {
+    editorRef.current?.focus();
+    // execCommand fontSize uses 1-7 scale
+    const sizeMap: Record<string, string> = { small: '2', normal: '3', large: '5' };
+    document.execCommand('fontSize', false, sizeMap[size] || '3');
+  };
+
+  const btnClass =
+    'px-2 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors min-w-[32px]';
+
+  return (
+    <div className="flex items-center gap-1 px-3 py-2 bg-gray-50 border border-gray-300 border-b-0 rounded-t-lg flex-wrap">
+      <button type="button" onClick={() => exec('bold')} className={btnClass} title="Bold">
+        <strong>B</strong>
+      </button>
+      <button type="button" onClick={() => exec('italic')} className={btnClass} title="Italic">
+        <em>I</em>
+      </button>
+      <button type="button" onClick={() => exec('underline')} className={btnClass} title="Underline">
+        <u>U</u>
+      </button>
+
+      <div className="w-px h-6 bg-gray-300 mx-1" />
+
+      <select
+        onChange={(e) => { handleFontSize(e.target.value); e.target.value = ''; }}
+        defaultValue=""
+        className="px-2 py-1 text-sm text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors cursor-pointer"
+        title="Font Size"
+      >
+        <option value="" disabled>Size</option>
+        <option value="small">Small</option>
+        <option value="normal">Normal</option>
+        <option value="large">Large</option>
+      </select>
+
+      <div className="w-px h-6 bg-gray-300 mx-1" />
+
+      <button type="button" onClick={handleLink} className={btnClass} title="Insert Link">
+        Link
+      </button>
+      <button type="button" onClick={() => exec('removeFormat')} className={`${btnClass} text-gray-400`} title="Clear Formatting">
+        Clear
+      </button>
+    </div>
+  );
 }
 
 export default function TemplatesPage() {
@@ -30,6 +92,22 @@ export default function TemplatesPage() {
     subject: '',
     body_html: ''
   });
+
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  // Sync contentEditable → formData on input
+  const handleEditorInput = useCallback(() => {
+    if (editorRef.current) {
+      setFormData(prev => ({ ...prev, body_html: editorRef.current!.innerHTML }));
+    }
+  }, []);
+
+  // Load HTML into editor when modal opens
+  useEffect(() => {
+    if (showModal && editorRef.current) {
+      editorRef.current.innerHTML = formData.body_html;
+    }
+  }, [showModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchTemplates = async () => {
     try {
@@ -82,7 +160,14 @@ export default function TemplatesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name.trim() || !formData.subject.trim() || !formData.body_html.trim()) {
+    // Sync editor content before validation
+    if (editorRef.current) {
+      formData.body_html = editorRef.current.innerHTML;
+    }
+
+    // Strip tags for emptiness check
+    const textContent = editorRef.current?.textContent?.trim() || '';
+    if (!formData.name.trim() || !formData.subject.trim() || !textContent) {
       setError('All fields are required');
       return;
     }
@@ -164,6 +249,12 @@ export default function TemplatesPage() {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  // Insert placeholder at cursor in contentEditable
+  const insertPlaceholder = (placeholder: string) => {
+    editorRef.current?.focus();
+    document.execCommand('insertText', false, placeholder);
   };
 
   if (loading) {
@@ -332,22 +423,35 @@ export default function TemplatesPage() {
                     </div>
 
                     <div>
-                      <label htmlFor="body_html" className="block text-sm font-medium text-gray-700 mb-1">
-                        Body (HTML)
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Body
                       </label>
-                      <textarea
-                        id="body_html"
-                        rows={12}
-                        value={formData.body_html}
-                        onChange={(e) => setFormData({ ...formData, body_html: e.target.value })}
-                        required
-                        disabled={submitting}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:bg-gray-100 font-mono"
-                        placeholder="<p>Hello {{name}},</p><p>Your email content here...</p>"
-                      ></textarea>
-                      <p className="mt-1 text-xs text-gray-500">
-                        Available placeholders: {"{{"}first_name{"}}"}, {"{{"}last_name{"}}"}, {"{{"}company_name{"}}"}, {"{{"}email{"}}"}, {"{{"}country{"}}"}, {"{{"}position{"}}"}, {"{{"}website{"}}"}, {"{{"}tag{"}}"}
-                      </p>
+                      <RichTextToolbar editorRef={editorRef} />
+                      <div
+                        ref={editorRef}
+                        contentEditable={!submitting}
+                        onInput={handleEditorInput}
+                        onKeyDown={(e) => {
+                          // Enter = new paragraph (default contentEditable behavior)
+                          // Ctrl/Cmd+B/I/U handled natively by contentEditable
+                        }}
+                        className="w-full min-h-[280px] max-h-[400px] overflow-y-auto px-3 py-2 border border-gray-300 rounded-b-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                        style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '14px', lineHeight: '1.6', color: '#333' }}
+                        data-placeholder="Start typing your email content..."
+                      />
+                      <div className="mt-2 flex items-center gap-1 flex-wrap">
+                        <span className="text-xs text-gray-400 mr-1">Insert:</span>
+                        {['{{first_name}}', '{{last_name}}', '{{company_name}}', '{{email}}', '{{country}}', '{{position}}', '{{website}}', '{{tag}}'].map(p => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => insertPlaceholder(p)}
+                            className="px-1.5 py-0.5 text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100 transition-colors"
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -471,6 +575,15 @@ export default function TemplatesPage() {
             </div>
           </div>
         )}
+
+        {/* Empty editor placeholder style */}
+        <style jsx global>{`
+          [contenteditable][data-placeholder]:empty::before {
+            content: attr(data-placeholder);
+            color: #9ca3af;
+            pointer-events: none;
+          }
+        `}</style>
       </div>
     </div>
   );
