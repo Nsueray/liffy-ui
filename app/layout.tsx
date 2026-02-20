@@ -6,8 +6,12 @@ import { Toaster } from "react-hot-toast"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
-  title: "Liffy UI",
+  title: "Liffy",
   description: "Liffy Admin Panel",
+  icons: {
+    icon: "https://cdn.liffy.app/assets/logo.png",
+    apple: "https://cdn.liffy.app/assets/logo.png",
+  },
 }
  
 export default function RootLayout({
