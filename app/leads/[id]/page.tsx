@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.liffy.app';
+
 interface PersonData {
   id: string;
   email: string;
@@ -142,7 +144,7 @@ export default function PersonDetailPage() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/persons/${personId}`, {
+      const res = await fetch(`${API_BASE}/api/persons/${personId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -188,7 +190,7 @@ export default function PersonDetailPage() {
     setVerifyError(null);
 
     try {
-      const res = await fetch('/api/verification/verify-single', {
+      const res = await fetch(`${API_BASE}/api/verification/verify-single`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -220,7 +222,7 @@ export default function PersonDetailPage() {
 
     setDeleteLoading(true);
     try {
-      const res = await fetch(`/api/persons/${personId}`, {
+      const res = await fetch(`${API_BASE}/api/persons/${personId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });

@@ -87,6 +87,8 @@ interface ZohoPush {
   pushed_at: string;
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.liffy.app';
+
 const VERIFICATION_STATUSES = [
   { value: 'exclude_invalid', label: 'Exclude Invalid' },
   { value: '', label: 'All Statuses' },
@@ -137,12 +139,12 @@ export default function ContactsPage() {
     if (!token) return;
 
     try {
-      const res = await fetch('/api/persons/stats', {
+      const res = await fetch(`${API_BASE}/api/persons/stats`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        const data: PersonStats = await res.json();
-        setStats(data);
+        const data = await res.json();
+        setStats(data as PersonStats);
       }
     } catch (err) {
       console.error('Failed to fetch stats', err);
@@ -167,15 +169,18 @@ export default function ContactsPage() {
 
       const token = getToken();
 
-      const res = await fetch(`/api/persons?${params.toString()}`, {
+      const res = await fetch(`${API_BASE}/api/persons?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to fetch contacts');
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+      }
 
-      const data: PersonsResponse = await res.json();
-      setPersons(data.persons);
-      setTotal(data.total);
+      const data = await res.json();
+      setPersons(data.persons || []);
+      setTotal(data.total || 0);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -200,7 +205,7 @@ export default function ContactsPage() {
 
     try {
       const token = getToken();
-      const res = await fetch(`/api/persons/${personId}`, {
+      const res = await fetch(`${API_BASE}/api/persons/${personId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
