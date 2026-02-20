@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Globe, FileText, UploadCloud, FileType, Zap, RefreshCw, Sparkles } from "lucide-react";
+import { ChevronLeft, Globe, FileText, UploadCloud, FileType, Zap, Sparkles, Info } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { getAuthHeaders } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -189,24 +189,8 @@ export default function NewMiningJobPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Mining Mode
                 </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {/* Quick Mode */}
-                  <button
-                    type="button"
-                    onClick={() => setMiningMode("quick")}
-                    className={`relative p-4 rounded-lg border-2 transition-all text-left ${
-                      miningMode === "quick"
-                        ? "border-yellow-500 bg-yellow-50"
-                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                    }`}
-                  >
-                    <Zap className={`h-6 w-6 mb-2 ${miningMode === "quick" ? "text-yellow-600" : "text-gray-400"}`} />
-                    <div className="font-medium text-sm text-gray-900">Quick</div>
-                    <div className="text-xs text-gray-500 mt-1">~30 seconds</div>
-                    <div className="text-xs text-green-600 font-medium mt-1">Free</div>
-                  </button>
-
-                  {/* Full Mode */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Free Mode (sends "full" to backend) */}
                   <button
                     type="button"
                     onClick={() => setMiningMode("full")}
@@ -216,8 +200,14 @@ export default function NewMiningJobPage() {
                         : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                     }`}
                   >
-                    <RefreshCw className={`h-6 w-6 mb-2 ${miningMode === "full" ? "text-blue-600" : "text-gray-400"}`} />
-                    <div className="font-medium text-sm text-gray-900">Full</div>
+                    <div className="group/info absolute top-2 right-2">
+                      <Info className="h-4 w-4 text-gray-400 hover:text-blue-600 cursor-help" />
+                      <div className="hidden group-hover/info:block absolute right-0 top-6 z-10 w-64 p-2.5 text-xs text-gray-700 bg-white border rounded-lg shadow-lg">
+                        Uses multiple mining strategies (table extraction, directory detection, pagination). Best for structured listing pages. Handles most sites automatically.
+                      </div>
+                    </div>
+                    <Zap className={`h-6 w-6 mb-2 ${miningMode === "full" ? "text-blue-600" : "text-gray-400"}`} />
+                    <div className="font-medium text-sm text-gray-900">Free</div>
                     <div className="text-xs text-gray-500 mt-1">~2 minutes</div>
                     <div className="text-xs text-green-600 font-medium mt-1">Free</div>
                   </button>
@@ -232,11 +222,15 @@ export default function NewMiningJobPage() {
                         : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                     }`}
                   >
-                    {miningMode === "ai" && (
-                      <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full">
-                        Best
-                      </span>
-                    )}
+                    <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full">
+                      Best
+                    </span>
+                    <div className="group/info absolute top-2 right-10">
+                      <Info className="h-4 w-4 text-gray-400 hover:text-purple-600 cursor-help" />
+                      <div className="hidden group-hover/info:block absolute right-0 top-6 z-10 w-64 p-2.5 text-xs text-gray-700 bg-white border rounded-lg shadow-lg">
+                        Uses Claude AI to intelligently extract and structure data. Highest accuracy with proper company-email-phone matching. Best for complex or unstructured pages.
+                      </div>
+                    </div>
                     <Sparkles className={`h-6 w-6 mb-2 ${miningMode === "ai" ? "text-purple-600" : "text-gray-400"}`} />
                     <div className="font-medium text-sm text-gray-900">AI Powered</div>
                     <div className="text-xs text-gray-500 mt-1">~1 minute</div>
@@ -246,18 +240,12 @@ export default function NewMiningJobPage() {
 
                 {/* Mode Description */}
                 <div className={`mt-3 p-3 rounded-lg text-sm ${
-                  miningMode === "quick" ? "bg-yellow-50 text-yellow-800" :
                   miningMode === "full" ? "bg-blue-50 text-blue-800" :
                   "bg-purple-50 text-purple-800"
                 }`}>
-                  {miningMode === "quick" && (
-                    <>
-                      <strong>Quick Mode:</strong> Basic HTTP scraping. Best for simple HTML pages. May miss JavaScript-rendered content.
-                    </>
-                  )}
                   {miningMode === "full" && (
                     <>
-                      <strong>Full Mode:</strong> Runs multiple extraction methods and merges results. Good coverage but may have some data inconsistencies.
+                      <strong>Free Mode:</strong> Uses multiple mining strategies (table extraction, directory detection, pagination). Handles most sites automatically.
                     </>
                   )}
                   {miningMode === "ai" && (
@@ -347,12 +335,12 @@ export default function NewMiningJobPage() {
               type="submit"
               disabled={loading}
               className={`w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                loading 
-                  ? "bg-gray-400 cursor-not-allowed" 
-                  : jobType === "url" 
+                loading
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : jobType === "url"
                     ? miningMode === "ai"
                       ? "bg-purple-600 hover:bg-purple-700 focus:ring-purple-500"
-                      : "bg-orange-600 hover:bg-orange-700 focus:ring-orange-500"
+                      : "bg-blue-600 hover:bg-blue-700 focus:ring-blue-500"
                     : "bg-blue-600 hover:bg-blue-700 focus:ring-blue-500"
               }`}
             >

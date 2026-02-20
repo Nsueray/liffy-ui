@@ -1097,10 +1097,10 @@ export default function MiningJobResultsPage() {
       {/* Table */}
       <div className="rounded-lg border bg-white overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
               <tr>
-                <th className="px-3 py-3">
+                <th className="px-2 py-3 w-10">
                   <input
                     type="checkbox"
                     checked={
@@ -1111,16 +1111,16 @@ export default function MiningJobResultsPage() {
                     className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
                   />
                 </th>
-                <th className="px-3 py-3 text-left">Company</th>
-                <th className="px-3 py-3 text-left">Contact</th>
-                <th className="px-3 py-3 text-left">Email(s)</th>
-                <th className="px-3 py-3 text-left">Website</th>
-                <th className="px-3 py-3 text-left">Phone</th>
-                <th className="px-3 py-3 text-left">Location</th>
-                <th className="px-3 py-3 text-center">Confidence</th>
-                <th className="px-3 py-3 text-center">Verification</th>
-                <th className="px-3 py-3 text-center">Status</th>
-                <th className="px-3 py-3 text-center">Actions</th>
+                <th className="px-2 py-3 text-left" style={{maxWidth: "160px"}}>Company</th>
+                <th className="px-2 py-3 text-left" style={{maxWidth: "140px"}}>Contact</th>
+                <th className="px-2 py-3 text-left" style={{maxWidth: "200px"}}>Email(s)</th>
+                <th className="px-2 py-3 text-left" style={{maxWidth: "160px"}}>Website</th>
+                <th className="px-2 py-3 text-left" style={{maxWidth: "120px"}}>Phone</th>
+                <th className="px-2 py-3 text-left" style={{maxWidth: "120px"}}>Location</th>
+                <th className="px-2 py-3 text-center w-20">Conf.</th>
+                <th className="px-2 py-3 text-center w-24">Verify</th>
+                <th className="px-2 py-3 text-center w-20">Status</th>
+                <th className="px-2 py-3 text-center w-16">Act.</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -1143,7 +1143,7 @@ export default function MiningJobResultsPage() {
 
                   return (
                     <tr key={result.id} className="hover:bg-gray-50">
-                      <td className="px-3 py-3">
+                      <td className="px-2 py-2">
                         <input
                           type="checkbox"
                           checked={selectedIds.includes(result.id)}
@@ -1151,16 +1151,18 @@ export default function MiningJobResultsPage() {
                           className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
                         />
                       </td>
-                      <td className="px-3 py-3">
-                        <EditableCell
-                          value={displayResult.company_name}
-                          onSave={(value) =>
-                            handleEditCell(result.id, "company_name", value)
-                          }
-                        />
+                      <td className="px-2 py-2 max-w-[160px]">
+                        <div className="truncate">
+                          <EditableCell
+                            value={displayResult.company_name}
+                            onSave={(value) =>
+                              handleEditCell(result.id, "company_name", value)
+                            }
+                          />
+                        </div>
                       </td>
-                      <td className="px-3 py-3">
-                        <div>
+                      <td className="px-2 py-2 max-w-[140px]">
+                        <div className="truncate">
                           <EditableCell
                             value={displayResult.contact_name}
                             onSave={(value) =>
@@ -1168,20 +1170,21 @@ export default function MiningJobResultsPage() {
                             }
                           />
                           {displayResult.job_title && (
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-gray-500 truncate block">
                               {displayResult.job_title}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="space-y-1">
+                      <td className="px-2 py-2 max-w-[200px]">
+                        <div className="space-y-0.5">
                           {displayResult.emails.map((email, idx) => (
-                            <div key={idx} className="flex items-center gap-1">
-                              <Mail className="h-3 w-3 text-gray-400" />
+                            <div key={idx} className="flex items-center gap-1 min-w-0">
+                              <Mail className="h-3 w-3 text-gray-400 shrink-0" />
                               <a
                                 href={`mailto:${email}`}
-                                className="text-xs text-blue-600 hover:underline"
+                                className="text-xs text-blue-600 hover:underline truncate"
+                                title={email}
                               >
                                 {email}
                               </a>
@@ -1192,16 +1195,17 @@ export default function MiningJobResultsPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-2 py-2 max-w-[160px]">
                         {websiteInfo ? (
                           <a
                             href={websiteInfo.href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline max-w-full"
+                            title={websiteInfo.label}
                           >
-                            <Globe className="h-3 w-3" />
-                            {websiteInfo.label}
+                            <Globe className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{websiteInfo.label}</span>
                           </a>
                         ) : (
                           <EditableCell
@@ -1213,37 +1217,37 @@ export default function MiningJobResultsPage() {
                           />
                         )}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-2 py-2 max-w-[120px]">
                         {displayResult.phone ? (
                           <div className="flex items-center gap-1">
-                            <Phone className="h-3 w-3 text-gray-400" />
-                            <span className="text-sm">{displayResult.phone}</span>
+                            <Phone className="h-3 w-3 text-gray-400 shrink-0" />
+                            <span className="text-xs truncate">{displayResult.phone}</span>
                           </div>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-2 py-2 max-w-[120px]">
                         <div className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3 text-gray-400" />
-                          <span className="text-sm">
+                          <MapPin className="h-3 w-3 text-gray-400 shrink-0" />
+                          <span className="text-xs truncate">
                             {[displayResult.city, displayResult.country]
                               .filter(Boolean)
                               .join(", ") || "—"}
                           </span>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-2 py-2 text-center whitespace-nowrap">
                         <ConfidenceScore score={displayResult.confidence_score} />
                       </td>
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-2 py-2 text-center whitespace-nowrap">
                         <VerificationBadge
                           status={displayResult.verification_status}
                         />
                       </td>
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-2 py-2 text-center whitespace-nowrap">
                         <span
-                          className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full
+                          className={`inline-flex px-1.5 py-0.5 text-xs font-medium rounded-full
                           ${
                             displayResult.status === "imported"
                               ? "bg-green-100 text-green-800"
@@ -1257,7 +1261,7 @@ export default function MiningJobResultsPage() {
                           {displayResult.status}
                         </span>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-2 py-2 whitespace-nowrap">
                         <div className="flex justify-center gap-1">
                           {displayResult.source_url && (
                             <a
