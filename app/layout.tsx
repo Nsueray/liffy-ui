@@ -9,8 +9,8 @@ export const metadata = {
   title: "Liffy",
   description: "Liffy Admin Panel",
   icons: {
-    icon: "https://cdn.liffy.app/assets/logo.png",
-    apple: "https://cdn.liffy.app/assets/logo.png",
+    icon: "/favicon-32x32.png",
+    apple: "/favicon-180x180.png",
   },
 }
  
