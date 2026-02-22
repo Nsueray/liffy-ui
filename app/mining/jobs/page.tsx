@@ -216,6 +216,58 @@ function StatusBadge({ status }: { status: MiningJobStatus }) {
   );
 }
 
+const MINER_LABELS: Record<string, string> = {
+  spaNetworkMiner: "SPA Network",
+  aiMiner: "AI",
+  playwrightTableMiner: "Table",
+  directoryMiner: "Directory",
+  documentMiner: "Document/PDF",
+  fileMiner: "File Upload",
+  httpBasicMiner: "HTTP Basic",
+  fullMiner: "Full",
+  localMiner: "Local",
+};
+
+const FLOW2_BADGES: Record<string, { label: string; className: string }> = {
+  skipped: { label: "F2 Skip", className: "bg-gray-100 text-gray-600 border-gray-200" },
+  completed: { label: "F2 ✓", className: "bg-green-100 text-green-700 border-green-200" },
+  limited: { label: "F2 Limited", className: "bg-orange-100 text-orange-700 border-orange-200" },
+  pending: { label: "F2 Pending", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+  not_needed: { label: "", className: "" },
+};
+
+function MinerStrategyCell({ job }: { job: MiningJob }) {
+  const minerUsed = job.stats?.miner_used;
+  const miningMode = job.stats?.mining_mode || job.config?.mining_mode || "full";
+  const flow2Status = job.stats?.flow2_status;
+
+  // If no stats yet (old jobs or pending), show strategy fallback
+  if (!minerUsed) {
+    return (
+      <span className="text-xs font-medium text-gray-600 capitalize">
+        {job.strategy || "auto"}
+      </span>
+    );
+  }
+
+  const minerLabel = MINER_LABELS[minerUsed] || minerUsed;
+  const flow2Badge = flow2Status ? FLOW2_BADGES[flow2Status] : null;
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs font-semibold text-gray-800">{minerLabel}</span>
+      <div className="flex items-center gap-1">
+        <span className="text-[10px] text-gray-500 capitalize">{miningMode === "full" ? "free" : miningMode}</span>
+        {flow2Badge && flow2Badge.label && (
+          <span className={`text-[10px] font-medium px-1.5 py-0 rounded border ${flow2Badge.className}`}>
+            {flow2Badge.label}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StatCard({ title, value, icon: Icon, color = "gray" }: any) {
   const colors: Record<string, string> = {
     gray: "bg-gray-100 text-gray-800",
@@ -623,9 +675,7 @@ export default function MiningJobsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-medium text-gray-600 capitalize">
-                        {job.strategy}
-                      </span>
+                      <MinerStrategyCell job={job} />
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={job.status} />
