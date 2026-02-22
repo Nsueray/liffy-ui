@@ -514,7 +514,7 @@ export default function MiningJobResultsPage() {
   const fetchEnrichStats = useCallback(async () => {
     if (!jobId || !isValidUuid(jobId)) return;
     try {
-      const res = await fetch(`/api/mining/jobs/${jobId}/enrich`, {
+      const res = await fetch(`/api/mining/jobs/${jobId}/enrich-stats`, {
         headers: getAuthHeaders() ?? {},
       });
       if (res.ok) {
@@ -546,7 +546,7 @@ export default function MiningJobResultsPage() {
         alert(`Enrichment started for ${data.unenriched_count} contacts. Results will update in the background.`);
         // Poll for completion
         const pollInterval = setInterval(async () => {
-          const statsRes = await fetch(`/api/mining/jobs/${jobId}/enrich`, {
+          const statsRes = await fetch(`/api/mining/jobs/${jobId}/enrich-stats`, {
             headers: getAuthHeaders() ?? {},
           });
           if (statsRes.ok) {
