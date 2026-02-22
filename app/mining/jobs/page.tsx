@@ -385,6 +385,36 @@ export default function MiningJobsPage() {
     }
   };
 
+  const handleRemine = async (job: MiningJob) => {
+    try {
+      const response = await fetch("/api/mining/jobs", {
+        method: "POST",
+        headers: {
+          ...(getAuthHeaders() ?? {}),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "url",
+          input: job.input,
+          name: `${job.name} (retry)`,
+          strategy: job.strategy || "auto",
+          config: job.config || {},
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create re-mine job");
+      }
+
+      toast.success("Re-mine job created!");
+      refetch();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "An error occurred";
+      toast.error(msg);
+    }
+  };
+
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortBy !== field) return null;
     return sortOrder === "asc" 
@@ -644,6 +674,15 @@ export default function MiningJobsPage() {
                             jobName={job.name}
                             onRetryComplete={refetch}
                           />
+                        )}
+                        {job.type === "url" && (
+                          <button
+                            onClick={() => handleRemine(job)}
+                            className="p-1 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded"
+                            title="Re-mine this URL"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </button>
                         )}
                         <button
                           onClick={() => handleSingleDelete(job.id)}

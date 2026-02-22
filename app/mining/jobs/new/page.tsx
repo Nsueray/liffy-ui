@@ -19,7 +19,7 @@ export default function NewMiningJobPage() {
   const [name, setName] = useState("");
   const [inputUrl, setInputUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [miningMode, setMiningMode] = useState("ai"); // Default to AI (best quality)
+  const [miningMode, setMiningMode] = useState("full"); // Default to Free mode
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
