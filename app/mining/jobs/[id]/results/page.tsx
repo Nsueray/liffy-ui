@@ -969,17 +969,19 @@ export default function MiningJobResultsPage() {
             Refresh
           </button>
           
-          {/* Enrich Remaining Button */}
-          {enrichStats && enrichStats.unenriched > 0 && (
+          {/* Enrich Remaining Button — always visible when stats loaded, hidden on API error */}
+          {enrichStats && (
             <button
               onClick={handleEnrich}
-              disabled={enrichLoading || enrichStats.is_enriching}
+              disabled={enrichLoading || enrichStats.is_enriching || enrichStats.unenriched === 0}
               className={`px-4 py-1.5 text-sm rounded-md ${
                 enrichStats.is_enriching
                   ? "bg-yellow-100 text-yellow-800 border border-yellow-300 cursor-wait"
+                  : enrichStats.unenriched === 0
+                  ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-default"
                   : "text-white bg-indigo-600 hover:bg-indigo-700"
               } disabled:opacity-60`}
-              title="Scrape websites to find email/phone for contacts without email"
+              title={enrichStats.unenriched === 0 ? "All contacts already enriched" : "Scrape websites to find email/phone for contacts without email"}
             >
               <Zap className="h-4 w-4 mr-1 inline" />
               {enrichStats.is_enriching
