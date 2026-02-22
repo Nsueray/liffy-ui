@@ -26,6 +26,7 @@ import {
   Tag,
   List,
   Upload,
+  Zap,
 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -221,6 +222,10 @@ export default function MiningJobResultsPage() {
   const [editedResults, setEditedResults] = useState<
     Record<string, Partial<MiningResult>>
   >({});
+
+  // Enrich State
+  const [enrichStats, setEnrichStats] = useState<{ unenriched: number; is_enriching: boolean } | null>(null);
+  const [enrichLoading, setEnrichLoading] = useState(false);
 
   // Import Modal State
   const [showImportModal, setShowImportModal] = useState(false);
@@ -502,6 +507,65 @@ export default function MiningJobResultsPage() {
       }
     } catch (err) {
       console.error("Error fetching import preview:", err);
+    }
+  };
+
+  // Fetch enrich stats
+  const fetchEnrichStats = useCallback(async () => {
+    if (!jobId || !isValidUuid(jobId)) return;
+    try {
+      const res = await fetch(`/api/mining/jobs/${jobId}/enrich`, {
+        headers: getAuthHeaders() ?? {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEnrichStats(data);
+      }
+    } catch (err) {
+      console.error("Error fetching enrich stats:", err);
+    }
+  }, [jobId]);
+
+  // Fetch enrich stats on load
+  useEffect(() => {
+    fetchEnrichStats();
+  }, [fetchEnrichStats]);
+
+  // Handle enrich remaining
+  const handleEnrich = async () => {
+    if (!jobId || !isValidUuid(jobId)) return;
+    setEnrichLoading(true);
+    try {
+      const res = await fetch(`/api/mining/jobs/${jobId}/enrich`, {
+        method: "POST",
+        headers: getAuthHeaders() ?? {},
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setEnrichStats(prev => prev ? { ...prev, is_enriching: true } : null);
+        alert(`Enrichment started for ${data.unenriched_count} contacts. Results will update in the background.`);
+        // Poll for completion
+        const pollInterval = setInterval(async () => {
+          const statsRes = await fetch(`/api/mining/jobs/${jobId}/enrich`, {
+            headers: getAuthHeaders() ?? {},
+          });
+          if (statsRes.ok) {
+            const stats = await statsRes.json();
+            setEnrichStats(stats);
+            if (!stats.is_enriching) {
+              clearInterval(pollInterval);
+              fetchResults();
+            }
+          }
+        }, 5000);
+      } else {
+        alert(data.error || "Failed to start enrichment");
+      }
+    } catch (err) {
+      console.error("Error starting enrichment:", err);
+      alert("Failed to start enrichment");
+    } finally {
+      setEnrichLoading(false);
     }
   };
 
@@ -905,6 +969,25 @@ export default function MiningJobResultsPage() {
             Refresh
           </button>
           
+          {/* Enrich Remaining Button */}
+          {enrichStats && enrichStats.unenriched > 0 && (
+            <button
+              onClick={handleEnrich}
+              disabled={enrichLoading || enrichStats.is_enriching}
+              className={`px-4 py-1.5 text-sm rounded-md ${
+                enrichStats.is_enriching
+                  ? "bg-yellow-100 text-yellow-800 border border-yellow-300 cursor-wait"
+                  : "text-white bg-indigo-600 hover:bg-indigo-700"
+              } disabled:opacity-60`}
+              title="Scrape websites to find email/phone for contacts without email"
+            >
+              <Zap className="h-4 w-4 mr-1 inline" />
+              {enrichStats.is_enriching
+                ? "Enriching..."
+                : `Enrich Remaining (${enrichStats.unenriched})`}
+            </button>
+          )}
+
           {/* Import All Button - NEW */}
           <button
             onClick={openImportModalAll}
