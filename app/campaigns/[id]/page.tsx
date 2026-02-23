@@ -337,18 +337,29 @@ export default function CampaignDetailPage() {
 
       {/* Analytics Summary Cards */}
       {summary ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {/* Sent */}
           <div className="bg-white rounded-lg border p-5">
             <div className="flex items-center justify-between mb-1">
               <p className="text-sm font-medium text-gray-500">Sent</p>
-              <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                {summary.delivery_rate}% delivered
-              </span>
             </div>
             <p className="text-3xl font-bold text-gray-900">{summary.sent.toLocaleString()}</p>
             <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
-              <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(summary.delivery_rate, 100)}%` }} />
+              <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '100%' }} />
+            </div>
+          </div>
+
+          {/* Delivered */}
+          <div className="bg-white rounded-lg border p-5">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-medium text-gray-500">Delivered</p>
+              <span className="text-xs font-medium text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-full">
+                {summary.delivery_rate}%
+              </span>
+            </div>
+            <p className="text-3xl font-bold text-cyan-600">{summary.delivered.toLocaleString()}</p>
+            <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+              <div className="bg-cyan-500 h-1.5 rounded-full" style={{ width: `${Math.min(summary.delivery_rate, 100)}%` }} />
             </div>
           </div>
 
