@@ -93,6 +93,7 @@ export default function TemplatesPage() {
     body_html: ''
   });
 
+  const [editorMode, setEditorMode] = useState<'visual' | 'html'>('visual');
   const editorRef = useRef<HTMLDivElement>(null);
 
   // Sync contentEditable → formData on input
@@ -102,12 +103,28 @@ export default function TemplatesPage() {
     }
   }, []);
 
-  // Load HTML into editor when modal opens
+  // Switch between Visual and HTML modes
+  const switchEditorMode = (mode: 'visual' | 'html') => {
+    if (mode === editorMode) return;
+    if (mode === 'html') {
+      // Visual → HTML: grab innerHTML into formData for textarea
+      if (editorRef.current) {
+        setFormData(prev => ({ ...prev, body_html: editorRef.current!.innerHTML }));
+      }
+    } else {
+      // HTML → Visual: load textarea value into contentEditable
+      // formData.body_html already has the textarea value (synced via onChange)
+      // editorRef will be populated by the useEffect below when it mounts
+    }
+    setEditorMode(mode);
+  };
+
+  // Load HTML into editor when modal opens or when switching to visual mode
   useEffect(() => {
-    if (showModal && editorRef.current) {
+    if (showModal && editorMode === 'visual' && editorRef.current) {
       editorRef.current.innerHTML = formData.body_html;
     }
-  }, [showModal]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showModal, editorMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchTemplates = async () => {
     try {
@@ -144,6 +161,7 @@ export default function TemplatesPage() {
   const openCreateModal = () => {
     setEditingTemplate(null);
     setFormData({ name: '', subject: '', body_html: '' });
+    setEditorMode('visual');
     setShowModal(true);
   };
 
@@ -154,20 +172,27 @@ export default function TemplatesPage() {
       subject: template.subject,
       body_html: template.body_html
     });
+    setEditorMode('visual');
     setShowModal(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Sync editor content before validation
-    if (editorRef.current) {
+    // Sync editor content before validation based on active mode
+    if (editorMode === 'visual' && editorRef.current) {
       formData.body_html = editorRef.current.innerHTML;
     }
+    // In HTML mode, formData.body_html is already synced via textarea onChange
 
-    // Strip tags for emptiness check
-    const textContent = editorRef.current?.textContent?.trim() || '';
-    if (!formData.name.trim() || !formData.subject.trim() || !textContent) {
+    // Emptiness check
+    let bodyEmpty = false;
+    if (editorMode === 'visual') {
+      bodyEmpty = !(editorRef.current?.textContent?.trim());
+    } else {
+      bodyEmpty = !formData.body_html.trim();
+    }
+    if (!formData.name.trim() || !formData.subject.trim() || bodyEmpty) {
       setError('All fields are required');
       return;
     }
@@ -426,19 +451,60 @@ export default function TemplatesPage() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Body
                       </label>
-                      <RichTextToolbar editorRef={editorRef} />
-                      <div
-                        ref={editorRef}
-                        contentEditable={!submitting}
-                        onInput={handleEditorInput}
-                        onKeyDown={(e) => {
-                          // Enter = new paragraph (default contentEditable behavior)
-                          // Ctrl/Cmd+B/I/U handled natively by contentEditable
-                        }}
-                        className="w-full min-h-[280px] max-h-[400px] overflow-y-auto px-3 py-2 border border-gray-300 rounded-b-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-                        style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '14px', lineHeight: '1.6', color: '#333' }}
-                        data-placeholder="Start typing your email content..."
-                      />
+
+                      {/* Mode Toggle */}
+                      <div className="flex items-center gap-1 mb-1">
+                        <button
+                          type="button"
+                          onClick={() => switchEditorMode('visual')}
+                          className={`px-3 py-1 text-xs font-medium rounded-t transition-colors ${
+                            editorMode === 'visual'
+                              ? 'bg-orange-600 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          Visual
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => switchEditorMode('html')}
+                          className={`px-3 py-1 text-xs font-medium rounded-t transition-colors ${
+                            editorMode === 'html'
+                              ? 'bg-orange-600 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          HTML
+                        </button>
+                      </div>
+
+                      {editorMode === 'visual' ? (
+                        <>
+                          <RichTextToolbar editorRef={editorRef} />
+                          <div
+                            ref={editorRef}
+                            contentEditable={!submitting}
+                            onInput={handleEditorInput}
+                            onKeyDown={(e) => {
+                              // Enter = new paragraph (default contentEditable behavior)
+                              // Ctrl/Cmd+B/I/U handled natively by contentEditable
+                            }}
+                            className="w-full min-h-[280px] max-h-[400px] overflow-y-auto px-3 py-2 border border-gray-300 rounded-b-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                            style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '14px', lineHeight: '1.6', color: '#333' }}
+                            data-placeholder="Start typing your email content..."
+                          />
+                        </>
+                      ) : (
+                        <textarea
+                          value={formData.body_html}
+                          onChange={(e) => setFormData(prev => ({ ...prev, body_html: e.target.value }))}
+                          disabled={submitting}
+                          className="w-full min-h-[320px] max-h-[500px] px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white disabled:bg-gray-100"
+                          placeholder="Paste or write raw HTML here..."
+                          spellCheck={false}
+                        />
+                      )}
+
                       <div className="mt-2 flex items-center gap-1 flex-wrap">
                         <span className="text-xs text-gray-400 mr-1">Insert:</span>
                         {['{{display_name}}', '{{first_name}}', '{{last_name}}', '{{company_name}}', '{{email}}', '{{country}}', '{{position}}', '{{website}}', '{{tag}}'].map(p => (
