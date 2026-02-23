@@ -337,7 +337,7 @@ export default function CampaignDetailPage() {
 
       {/* Analytics Summary Cards */}
       {summary ? (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {/* Sent */}
           <div className="bg-white rounded-lg border p-5">
             <div className="flex items-center justify-between mb-1">
@@ -388,6 +388,17 @@ export default function CampaignDetailPage() {
             <p className="text-3xl font-bold text-purple-600">{summary.clicks.toLocaleString()}</p>
             <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
               <div className="bg-purple-500 h-1.5 rounded-full" style={{ width: `${Math.min(summary.click_rate, 100)}%` }} />
+            </div>
+          </div>
+
+          {/* Replied */}
+          <div className="bg-white rounded-lg border p-5">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-medium text-gray-500">Replied</p>
+            </div>
+            <p className="text-3xl font-bold text-amber-600">{(summary.replies || 0).toLocaleString()}</p>
+            <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+              <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: `${summary.sent > 0 ? Math.min((summary.replies || 0) / summary.sent * 100, 100) : 0}%` }} />
             </div>
           </div>
 
