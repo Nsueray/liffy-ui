@@ -292,9 +292,14 @@ export default function CampaignsPage() {
           <h2 className="text-3xl font-bold">Campaigns</h2>
           <p className="text-sm text-muted-foreground">Manage your email outreach.</p>
         </div>
-        <button onClick={() => setShowCreateModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-          Create Campaign
-        </button>
+        <div className="flex gap-2">
+          <Link href="/campaigns/unsubscribes" className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50">
+            Unsubscribes
+          </Link>
+          <button onClick={() => setShowCreateModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            Create Campaign
+          </button>
+        </div>
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">{error}</div>}
