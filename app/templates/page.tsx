@@ -276,10 +276,27 @@ export default function TemplatesPage() {
     });
   };
 
-  // Insert placeholder at cursor in contentEditable
+  // Insert placeholder at cursor — works in both Visual (contentEditable) and HTML (textarea) modes
+  const htmlTextareaRef = useRef<HTMLTextAreaElement>(null);
   const insertPlaceholder = (placeholder: string) => {
-    editorRef.current?.focus();
-    document.execCommand('insertText', false, placeholder);
+    if (editorMode === 'visual') {
+      editorRef.current?.focus();
+      document.execCommand('insertText', false, placeholder);
+    } else {
+      const ta = htmlTextareaRef.current;
+      if (!ta) return;
+      ta.focus();
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const before = ta.value.substring(0, start);
+      const after = ta.value.substring(end);
+      const newValue = before + placeholder + after;
+      setFormData(prev => ({ ...prev, body_html: newValue }));
+      // Restore cursor position after React re-render
+      requestAnimationFrame(() => {
+        ta.selectionStart = ta.selectionEnd = start + placeholder.length;
+      });
+    }
   };
 
   if (loading) {
@@ -496,6 +513,7 @@ export default function TemplatesPage() {
                         </>
                       ) : (
                         <textarea
+                          ref={htmlTextareaRef}
                           value={formData.body_html}
                           onChange={(e) => setFormData(prev => ({ ...prev, body_html: e.target.value }))}
                           disabled={submitting}
@@ -506,18 +524,34 @@ export default function TemplatesPage() {
                       )}
 
                       <div className="mt-2 flex items-center gap-1 flex-wrap">
+                        <span className="text-xs text-gray-400 mr-1">Smart Placeholders:</span>
+                        {([
+                          { value: '{{first_name|last_name|company_name|"Export Manager"}}', label: 'Export Manager', tip: 'Name \u2192 Surname \u2192 Company \u2192 Export Manager' },
+                          { value: '{{first_name|last_name|company_name|"Dear Exhibitor"}}', label: 'Dear Exhibitor', tip: 'Name \u2192 Surname \u2192 Company \u2192 Dear Exhibitor' },
+                          { value: '{{first_name|last_name|company_name|"Business Partner"}}', label: 'Business Partner', tip: 'Name \u2192 Surname \u2192 Company \u2192 Business Partner' },
+                          { value: '{{first_name|last_name|company_name|"Industry Professional"}}', label: 'Industry Professional', tip: 'Name \u2192 Surname \u2192 Company \u2192 Industry Professional' },
+                          { value: '{{first_name|last_name|company_name|"Valued Partner"}}', label: 'Valued Partner', tip: 'Name \u2192 Surname \u2192 Company \u2192 Valued Partner' },
+                          { value: '{{first_name|last_name|company_name|"Trade Representative"}}', label: 'Trade Representative', tip: 'Name \u2192 Surname \u2192 Company \u2192 Trade Representative' },
+                        ] as const).map(p => (
+                          <button
+                            key={p.label}
+                            type="button"
+                            onClick={() => insertPlaceholder(p.value)}
+                            className="px-1.5 py-0.5 text-xs border rounded transition-colors text-green-700 bg-green-50 border-green-200 hover:bg-green-100"
+                            title={p.tip}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1 flex-wrap">
                         <span className="text-xs text-gray-400 mr-1">Insert:</span>
-                        {['{{display_name}}', '{{first_name}}', '{{last_name}}', '{{company_name}}', '{{email}}', '{{country}}', '{{position}}', '{{website}}', '{{tag}}'].map(p => (
+                        {['{{first_name}}', '{{last_name}}', '{{company_name}}', '{{email}}', '{{country}}', '{{position}}', '{{website}}', '{{tag}}'].map(p => (
                           <button
                             key={p}
                             type="button"
                             onClick={() => insertPlaceholder(p)}
-                            className={`px-1.5 py-0.5 text-xs border rounded hover:bg-orange-100 transition-colors ${
-                              p === '{{display_name}}'
-                                ? 'text-green-700 bg-green-50 border-green-200 hover:bg-green-100'
-                                : 'text-orange-600 bg-orange-50 border-orange-200'
-                            }`}
-                            title={p === '{{display_name}}' ? 'Auto: first_name → company → "Valued Partner"' : undefined}
+                            className="px-1.5 py-0.5 text-xs border rounded transition-colors text-orange-600 bg-orange-50 border-orange-200 hover:bg-orange-100"
                           >
                             {p}
                           </button>
