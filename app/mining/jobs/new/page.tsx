@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Globe, FileText, UploadCloud, FileType, Zap, Sparkles, Info } from "lucide-react";
+import { ChevronLeft, Globe, FileText, UploadCloud, FileType, Zap, Sparkles, Info, Settings } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { getAuthHeaders } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -20,6 +20,9 @@ export default function NewMiningJobPage() {
   const [inputUrl, setInputUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [miningMode, setMiningMode] = useState("full"); // Default to Free mode
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [advancedConfig, setAdvancedConfig] = useState("");
+  const [configError, setConfigError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,6 +34,19 @@ export default function NewMiningJobPage() {
     if (jobType === "file" && !selectedFile) {
       toast.error("Please select a file to upload");
       return;
+    }
+
+    // Validate advanced config JSON
+    let parsedConfig: Record<string, unknown> | null = null;
+    if (advancedConfig.trim()) {
+      try {
+        parsedConfig = JSON.parse(advancedConfig.trim());
+        setConfigError("");
+      } catch {
+        setConfigError("Invalid JSON");
+        toast.error("Advanced Config contains invalid JSON");
+        return;
+      }
     }
 
     setLoading(true);
@@ -52,7 +68,8 @@ export default function NewMiningJobPage() {
             name: name || `Mining Job - ${new Date().toLocaleString()}`,
             strategy: "auto",
             config: {
-              mining_mode: miningMode
+              mining_mode: miningMode,
+              ...(parsedConfig || {})
             }
           }),
         });
@@ -62,8 +79,11 @@ export default function NewMiningJobPage() {
         formData.append("file", selectedFile as Blob);
         formData.append("type", "file"); 
         formData.append("name", name || selectedFile?.name || "File Mining Job");
-        formData.append("strategy", "auto"); 
-        
+        formData.append("strategy", "auto");
+        if (parsedConfig) {
+          formData.append("config", JSON.stringify(parsedConfig));
+        }
+
         // Construct headers for file upload
         const authHeaders = getAuthHeaders() ?? {};
         // Do NOT set Content-Type manually for FormData; browser sets boundary
@@ -328,6 +348,43 @@ export default function NewMiningJobPage() {
               </div>
             </div>
           )}
+
+          {/* Advanced Config (Collapsible) */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <Settings className="h-4 w-4" />
+              Advanced Config (optional)
+              <ChevronLeft className={`h-3 w-3 transition-transform ${showAdvanced ? "-rotate-90" : ""}`} />
+            </button>
+            {showAdvanced && (
+              <div className="mt-3">
+                <textarea
+                  value={advancedConfig}
+                  onChange={(e) => {
+                    setAdvancedConfig(e.target.value);
+                    if (configError) setConfigError("");
+                  }}
+                  placeholder='{"max_pages": 50, "delay_ms": 500}'
+                  rows={4}
+                  className={`w-full px-3 py-2 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-offset-2 focus:outline-none ${
+                    configError
+                      ? "border-red-400 focus:ring-red-500"
+                      : "border-gray-300 focus:ring-orange-500"
+                  }`}
+                />
+                {configError && (
+                  <p className="text-xs text-red-600 mt-1">{configError}</p>
+                )}
+                <p className="text-xs text-gray-400 mt-1">
+                  Optional JSON config for mining parameters (max_pages, delay_ms, max_details, etc.)
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* Submit Button */}
           <div className="pt-4 border-t">
