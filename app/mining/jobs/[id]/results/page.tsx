@@ -794,48 +794,27 @@ export default function MiningJobResultsPage() {
     }
   };
 
-  const handleExportCSV = () => {
-    const selectedResults =
-      selectedIds.length > 0
-        ? results.filter((r) => selectedIds.includes(r.id))
-        : filteredResults;
+  const [exporting, setExporting] = useState(false);
 
-    const csv = [
-      [
-        "Company",
-        "Contact Name",
-        "Job Title",
-        "Emails",
-        "Website",
-        "Phone",
-        "Country",
-        "City",
-        "Confidence",
-        "Verification",
-      ],
-      ...selectedResults.map((r) => [
-        r.company_name || "",
-        r.contact_name || "",
-        r.job_title || "",
-        r.emails.join("; "),
-        r.website || "",
-        r.phone || "",
-        r.country || "",
-        r.city || "",
-        r.confidence_score?.toString() || "",
-        r.verification_status || "",
-      ]),
-    ]
-      .map((row) => row.map((cell) => `"${cell}"`).join(","))
-      .join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `mining-results-${jobId || "unknown"}-${Date.now()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExportAll = async (format: 'xlsx' | 'csv' = 'xlsx') => {
+    try {
+      setExporting(true);
+      const response = await fetch(`/api/mining/jobs/${jobId}/results/export?format=${format}`, {
+        headers: getAuthHeaders() ?? {},
+      });
+      if (!response.ok) throw new Error('Export failed');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mining-results-${jobId}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export error:', err);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleVerifyEmails = async () => {
@@ -961,6 +940,14 @@ export default function MiningJobResultsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleExportAll('xlsx')}
+            disabled={exporting || totalFromServer === 0}
+            className="px-3 py-1.5 text-sm border rounded-md hover:bg-gray-50 disabled:opacity-50"
+          >
+            <Download className="h-4 w-4 mr-1 inline" />
+            {exporting ? 'Exporting...' : `Export All (${totalFromServer})`}
+          </button>
           <button
             onClick={fetchResults}
             className="px-3 py-1.5 text-sm border rounded-md hover:bg-gray-50"
@@ -1156,7 +1143,7 @@ export default function MiningJobResultsPage() {
               Verify Emails
             </button>
             <button
-              onClick={handleExportCSV}
+              onClick={() => handleExportAll('csv')}
               className="px-3 py-1.5 text-sm border bg-white rounded-md hover:bg-gray-50"
             >
               <Download className="h-4 w-4 mr-1 inline" />

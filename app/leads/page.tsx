@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Download } from 'lucide-react';
 
 interface Person {
   id: string;
@@ -271,6 +272,35 @@ export default function ContactsPage() {
     return parts.length > 0 ? parts.join(' ') : null;
   };
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportAll = async (format: 'xlsx' | 'csv' = 'xlsx') => {
+    try {
+      setExporting(true);
+      const params = new URLSearchParams({ format });
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (verificationStatus) params.set('verification_status', verificationStatus);
+      if (country) params.set('country', country);
+      if (company) params.set('company', company);
+
+      const response = await fetch(`${API_BASE}/api/persons/export?${params}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!response.ok) throw new Error('Export failed');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `contacts-export.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export error:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const startRecord = total > 0 ? (page - 1) * limit + 1 : 0;
   const endRecord = Math.min(page * limit, total);
 
@@ -283,6 +313,15 @@ export default function ContactsPage() {
             {loading ? 'Loading...' : `${total.toLocaleString()} total contacts`}
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleExportAll('xlsx')}
+          disabled={exporting || total === 0}
+        >
+          <Download className="h-4 w-4 mr-1" />
+          {exporting ? 'Exporting...' : `Export All (${total.toLocaleString()})`}
+        </Button>
       </div>
 
       {/* Stats Cards */}

@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface ListMember {
@@ -451,6 +451,29 @@ export default function ListDetailPage() {
     );
   }
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportAll = async (format: 'xlsx' | 'csv' = 'xlsx') => {
+    try {
+      setExporting(true);
+      const response = await fetch(`/api/lists/${listId}/export?format=${format}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!response.ok) throw new Error('Export failed');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `list-${listId}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export error:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (!list) {
     return null;
   }
@@ -500,6 +523,14 @@ export default function ListDetailPage() {
               )}
             </Tooltip>
           </TooltipProvider>
+          <Button
+            variant="outline"
+            onClick={() => handleExportAll('xlsx')}
+            disabled={exporting || !list || list.total_leads === 0}
+          >
+            <Download className="h-4 w-4 mr-1" />
+            {exporting ? 'Exporting...' : `Export (${list?.total_leads || 0})`}
+          </Button>
           <Button onClick={() => setShowAddModal(true)}>
             + Add Leads
           </Button>
