@@ -74,6 +74,9 @@ export default function ListDetailPage() {
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [verifyPolling, setVerifyPolling] = useState(false);
 
+  // Export State
+  const [exporting, setExporting] = useState(false);
+
   const getToken = () => localStorage.getItem('liffy_token');
 
   const fetchList = useCallback(async () => {
@@ -369,6 +372,27 @@ export default function ListDetailPage() {
     setImportResult(null);
   };
 
+  const handleExportAll = async (format: 'xlsx' | 'csv' = 'xlsx') => {
+    try {
+      setExporting(true);
+      const response = await fetch(`/api/lists/${listId}/export?format=${format}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!response.ok) throw new Error('Export failed');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `list-${listId}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export error:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const getStatusBadgeClass = (status: string): string => {
     switch (status) {
       case 'valid': return 'bg-green-100 text-green-800 hover:bg-green-100';
@@ -450,29 +474,6 @@ export default function ListDetailPage() {
       </div>
     );
   }
-
-  const [exporting, setExporting] = useState(false);
-
-  const handleExportAll = async (format: 'xlsx' | 'csv' = 'xlsx') => {
-    try {
-      setExporting(true);
-      const response = await fetch(`/api/lists/${listId}/export?format=${format}`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (!response.ok) throw new Error('Export failed');
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `list-${listId}.${format}`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Export error:', err);
-    } finally {
-      setExporting(false);
-    }
-  };
 
   if (!list) {
     return null;
