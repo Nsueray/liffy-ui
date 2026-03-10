@@ -69,6 +69,10 @@ export default function SourceDiscoveryPage() {
         .map((c) => c.trim())
         .filter(Boolean);
 
+      // 90s timeout — web search can take up to 60s on backend
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000);
+
       const res = await fetch("/api/source-discovery", {
         method: "POST",
         headers: {
@@ -80,7 +84,10 @@ export default function SourceDiscoveryPage() {
           industry: industry.trim(),
           target_countries: countries,
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const data = await res.json();
@@ -97,8 +104,12 @@ export default function SourceDiscoveryPage() {
         toast("No sources found. Try different search terms.", { icon: "🔍" });
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "An error occurred";
-      toast.error(message);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        toast.error("Request timed out. Try again with narrower search terms.");
+      } else {
+        const message = err instanceof Error ? err.message : "An error occurred";
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }
