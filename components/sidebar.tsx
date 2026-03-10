@@ -32,6 +32,7 @@ import {
   Activity,
   ShieldCheck,
   BarChart3,
+  Search,
 } from "lucide-react";
 import { logoutClient } from "@/lib/auth";
 
@@ -43,12 +44,18 @@ const menuItems = [
     icon: LayoutDashboard,
     description: "Overview and analytics"
   },
-  { 
-    name: "Mining Jobs", 
-    href: "/mining/jobs", 
+  {
+    name: "Mining Jobs",
+    href: "/mining/jobs",
     icon: Database,
     description: "Data extraction jobs",
     badge: { type: "info", count: 0 } // Will be updated dynamically
+  },
+  {
+    name: "Source Discovery",
+    href: "/source-discovery",
+    icon: Search,
+    description: "AI-powered source finder"
   },
   {
     name: "Contacts",
