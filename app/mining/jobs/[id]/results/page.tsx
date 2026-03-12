@@ -253,6 +253,13 @@ export default function MiningJobResultsPage() {
   const [page, setPage] = useState(1);
   const ITEMS_PER_PAGE = 50;
   const [totalFromServer, setTotalFromServer] = useState(0);
+  const [serverSummary, setServerSummary] = useState<{
+    total: number;
+    with_email: number;
+    without_email: number;
+    with_company: number;
+    with_phone: number;
+  } | null>(null);
 
   // Fetch data
   const fetchResults = useCallback(async () => {
@@ -311,6 +318,10 @@ export default function MiningJobResultsPage() {
         setTotalFromServer(items.length);
       }
 
+      if (data.summary) {
+        setServerSummary(data.summary);
+      }
+
       const transformedResults: MiningResult[] = items.map((item: any) => ({
         ...item,
         job_id: item.job_id || item.jobId || jobId,
@@ -354,11 +365,11 @@ export default function MiningJobResultsPage() {
     setPage(1);
   }, [search, emailFilter, statusFilter, verificationFilter, countryFilter]);
 
-  // Calculate summary
+  // Calculate summary — use server-side counts for totals, client-side for page-level stats
   const summary = useMemo((): Summary => {
-    const total = results.length;
-    const withEmail = results.filter((r) => r.emails.length > 0).length;
-    const withoutEmail = total - withEmail;
+    const total = serverSummary?.total ?? totalFromServer;
+    const withEmail = serverSummary?.with_email ?? results.filter((r) => r.emails.length > 0).length;
+    const withoutEmail = serverSummary?.without_email ?? (total - withEmail);
     const reviewed = results.filter((r) => r.status === "reviewed").length;
     const imported = results.filter((r) => r.status === "imported").length;
 
@@ -389,7 +400,7 @@ export default function MiningJobResultsPage() {
       countries,
       verification_stats: verificationStats,
     };
-  }, [results]);
+  }, [results, serverSummary, totalFromServer]);
 
   // Filter results
   const filteredResults = useMemo(() => {
