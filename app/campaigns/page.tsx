@@ -61,6 +61,13 @@ export default function CampaignsPage() {
   const [resolveStats, setResolveStats] = useState<ResolveStats | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
 
+  // Schedule Modal States
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleTarget, setScheduleTarget] = useState<Campaign | null>(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleDatetime, setScheduleDatetime] = useState("");
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+
   // Form Inputs
   const [newCampaignName, setNewCampaignName] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -134,6 +141,52 @@ export default function CampaignsPage() {
       setError(err.message);
     } finally {
       setActionLoading(null);
+    }
+  }
+
+  // --- SCHEDULE ---
+  function openScheduleModal(campaign: Campaign) {
+    setScheduleTarget(campaign);
+    setScheduleError(null);
+    // Default to 1 hour from now
+    const d = new Date(Date.now() + 3600000);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    setScheduleDatetime(d.toISOString().slice(0, 16));
+    setShowScheduleModal(true);
+  }
+
+  async function handleSchedule() {
+    if (!scheduleTarget || !scheduleDatetime) return;
+    const token = getToken();
+    if (!token) return;
+
+    const scheduledAt = new Date(scheduleDatetime);
+    if (scheduledAt <= new Date()) {
+      setScheduleError("Scheduled time must be in the future");
+      return;
+    }
+
+    setScheduleLoading(true);
+    setScheduleError(null);
+
+    try {
+      const res = await fetch(`${apiBase}/api/campaigns/${scheduleTarget.id}/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ scheduled_at: scheduledAt.toISOString() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to schedule campaign");
+
+      if (data.campaign) {
+        setCampaigns((prev) => prev.map((c) => (c.id === scheduleTarget.id ? { ...c, ...data.campaign } : c)));
+      }
+      setShowScheduleModal(false);
+      setScheduleTarget(null);
+    } catch (err: any) {
+      setScheduleError(err.message);
+    } finally {
+      setScheduleLoading(false);
     }
   }
 
@@ -270,6 +323,7 @@ export default function CampaignsPage() {
     const styles: any = {
       draft: "bg-gray-100 text-gray-800",
       ready: "bg-blue-100 text-blue-800",
+      scheduled: "bg-indigo-100 text-indigo-800",
       sending: "bg-green-100 text-green-800",
       paused: "bg-orange-100 text-orange-800",
       completed: "bg-purple-100 text-purple-800",
@@ -312,13 +366,14 @@ export default function CampaignsPage() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recipients</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Template</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Scheduled</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {campaigns.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">No campaigns yet.</td></tr>
+                <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-500">No campaigns yet.</td></tr>
             ) : (
                 campaigns.map((c) => (
                     <tr key={c.id} className="hover:bg-gray-50">
@@ -330,6 +385,7 @@ export default function CampaignsPage() {
                       <td className="px-6 py-4"><span className={`px-2 py-1 text-xs rounded-full font-semibold ${getStatusBadge(c.status)}`}>{c.status}</span></td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.recipient_count ?? "-"}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.template_name || c.template_subject || "Unknown"}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{c.scheduled_at ? formatDate(c.scheduled_at) : "-"}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{formatDate(c.created_at)}</td>
                       <td className="px-6 py-4 text-right text-sm">
                         <div className="flex justify-end gap-2">
@@ -343,14 +399,33 @@ export default function CampaignsPage() {
                                 </button>
                             )}
                             
-                            {/* READY -> START */}
+                            {/* READY -> SEND NOW or SCHEDULE */}
                             {c.status === 'ready' && (
+                                <>
+                                  <button
+                                      onClick={() => handleAction(c.id, 'start')}
+                                      disabled={actionLoading === c.id}
+                                      className="text-green-600 hover:text-green-800 font-medium disabled:opacity-50"
+                                  >
+                                      {actionLoading === c.id ? "Starting..." : "Send Now"}
+                                  </button>
+                                  <button
+                                      onClick={() => openScheduleModal(c)}
+                                      className="text-indigo-600 hover:text-indigo-800 font-medium"
+                                  >
+                                      Schedule
+                                  </button>
+                                </>
+                            )}
+
+                            {/* SCHEDULED -> SEND NOW (cancel schedule) */}
+                            {c.status === 'scheduled' && (
                                 <button
                                     onClick={() => handleAction(c.id, 'start')}
                                     disabled={actionLoading === c.id}
                                     className="text-green-600 hover:text-green-800 font-medium disabled:opacity-50"
                                 >
-                                    {actionLoading === c.id ? "Starting..." : "Start Campaign"}
+                                    {actionLoading === c.id ? "Starting..." : "Send Now"}
                                 </button>
                             )}
 
@@ -574,6 +649,47 @@ export default function CampaignsPage() {
                 className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
               >
                 {deleteLoading ? "Deleting..." : "Delete Campaign"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* SCHEDULE MODAL */}
+      {showScheduleModal && scheduleTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-bold mb-1">Schedule Campaign</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Set send time for <strong>{scheduleTarget.name}</strong>
+            </p>
+
+            {scheduleError && <div className="bg-red-50 text-red-600 p-2 text-sm rounded mb-4">{scheduleError}</div>}
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Send Date & Time</label>
+              <input
+                type="datetime-local"
+                className="w-full border rounded px-3 py-2"
+                value={scheduleDatetime}
+                onChange={e => setScheduleDatetime(e.target.value)}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <button
+                type="button"
+                onClick={() => { setShowScheduleModal(false); setScheduleTarget(null); }}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                disabled={scheduleLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSchedule}
+                disabled={scheduleLoading || !scheduleDatetime}
+                className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {scheduleLoading ? "Scheduling..." : "Schedule Send"}
               </button>
             </div>
           </div>
