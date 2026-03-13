@@ -1,45 +1,45 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { getAuthHeaders } from '@/lib/auth';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
-interface IntentItem {
+interface Prospect {
   id: string;
   person_id: string;
   email: string;
   first_name: string | null;
   last_name: string | null;
+  company_name: string | null;
+  job_title: string | null;
   intent_type: string;
   campaign_id: string | null;
   campaign_name: string | null;
   source: string | null;
-  notes: string | null;
   confidence: number | null;
   occurred_at: string;
   created_at: string;
 }
 
-interface IntentsResponse {
+interface ProspectStats {
+  total_prospects: number;
+  total_signals: number;
+  replies: number;
+  clicks: number;
+}
+
+interface ProspectsResponse {
   total: number;
   page: number;
   limit: number;
-  intents: IntentItem[];
-}
-
-interface IntentTypeStat {
-  intent_type: string;
-  count: number;
-  unique_persons: number;
-  last_at: string | null;
-}
-
-interface IntentStats {
-  total_persons_with_intent: number;
-  by_type: IntentTypeStat[];
+  stats: ProspectStats;
+  prospects: Prospect[];
 }
 
 const INTENT_TYPES = [
@@ -47,18 +47,10 @@ const INTENT_TYPES = [
   { value: 'reply', label: 'Reply' },
   { value: 'click_through', label: 'Click Through' },
   { value: 'form_submission', label: 'Form Submission' },
-  { value: 'manual_qualification', label: 'Manual Qualification' },
+  { value: 'manual_qualification', label: 'Manual' },
   { value: 'meeting_booked', label: 'Meeting Booked' },
   { value: 'inbound_request', label: 'Inbound Request' },
   { value: 'referral', label: 'Referral' },
-];
-
-const SOURCES = [
-  { value: '', label: 'All Sources' },
-  { value: 'webhook', label: 'Webhook' },
-  { value: 'manual', label: 'Manual' },
-  { value: 'api', label: 'API' },
-  { value: 'automation', label: 'Automation' },
 ];
 
 const getIntentBadgeClass = (type: string): string => {
@@ -79,7 +71,10 @@ const formatIntentType = (type: string): string => {
 };
 
 export default function ProspectsPage() {
-  const [intents, setIntents] = useState<IntentItem[]>([]);
+  useAuthGuard();
+  const router = useRouter();
+
+  const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,15 +84,9 @@ export default function ProspectsPage() {
 
   const [search, setSearch] = useState('');
   const [intentType, setIntentType] = useState('');
-  const [source, setSource] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  const [stats, setStats] = useState<IntentStats | null>(null);
-
-  // Detail expand
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  const getToken = () => localStorage.getItem('liffy_token');
+  const [stats, setStats] = useState<ProspectStats | null>(null);
 
   // Debounced search
   useEffect(() => {
@@ -108,28 +97,9 @@ export default function ProspectsPage() {
   // Reset page on filter change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, intentType, source]);
+  }, [debouncedSearch, intentType]);
 
-  // Fetch stats
-  const fetchStats = useCallback(async () => {
-    const token = getToken();
-    if (!token) return;
-
-    try {
-      const res = await fetch('/api/intents/stats', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data: IntentStats = await res.json();
-        setStats(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch intent stats', err);
-    }
-  }, []);
-
-  // Fetch intents list
-  const fetchIntents = useCallback(async () => {
+  const fetchProspects = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -140,66 +110,45 @@ export default function ProspectsPage() {
       });
 
       if (intentType) params.append('intent_type', intentType);
-      if (source) params.append('source', source);
-      // Note: backend intents endpoint doesn't support text search directly,
-      // but we can filter by person_id if needed. For now we filter client-side.
+      if (debouncedSearch) params.append('search', debouncedSearch);
 
-      const token = getToken();
-      const res = await fetch(`/api/intents?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await fetch(`/api/prospects?${params.toString()}`, {
+        headers: getAuthHeaders()
       });
 
       if (!res.ok) throw new Error('Failed to fetch prospects');
 
-      const data: IntentsResponse = await res.json();
+      const data: ProspectsResponse = await res.json();
 
-      // Client-side search filter (name/email)
-      let filtered = data.intents;
-      if (debouncedSearch) {
-        const q = debouncedSearch.toLowerCase();
-        filtered = filtered.filter(i =>
-          i.email?.toLowerCase().includes(q) ||
-          i.first_name?.toLowerCase().includes(q) ||
-          i.last_name?.toLowerCase().includes(q) ||
-          i.campaign_name?.toLowerCase().includes(q)
-        );
-      }
-
-      setIntents(filtered);
-      setTotal(debouncedSearch ? filtered.length : data.total);
+      setProspects(data.prospects);
+      setTotal(data.total);
+      if (data.stats) setStats(data.stats);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [page, limit, intentType, source, debouncedSearch]);
+  }, [page, limit, intentType, debouncedSearch]);
 
   useEffect(() => {
-    fetchIntents();
-  }, [fetchIntents]);
-
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
+    fetchProspects();
+  }, [fetchProspects]);
 
   const totalPages = Math.ceil(total / limit);
-  const hasActiveFilters = search || intentType || source;
+  const hasActiveFilters = search || intentType;
 
   const clearFilters = () => {
     setSearch('');
     setIntentType('');
-    setSource('');
   };
 
-  const formatName = (item: IntentItem) => {
+  const formatName = (item: Prospect) => {
     const parts = [item.first_name, item.last_name].filter(Boolean);
     return parts.length > 0 ? parts.join(' ') : null;
   };
 
   const startRecord = total > 0 ? (page - 1) * limit + 1 : 0;
   const endRecord = Math.min(page * limit, total);
-
-  const totalIntents = stats?.by_type.reduce((sum, t) => sum + t.count, 0) || 0;
 
   return (
     <div className="p-6 space-y-6">
@@ -208,7 +157,7 @@ export default function ProspectsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Prospects</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {loading ? 'Loading...' : `${total.toLocaleString()} intent signals from ${stats?.total_persons_with_intent?.toLocaleString() || 0} persons`}
+            {loading ? 'Loading...' : `${stats?.total_prospects?.toLocaleString() || 0} prospects with ${stats?.total_signals?.toLocaleString() || 0} intent signals`}
           </p>
         </div>
       </div>
@@ -219,56 +168,37 @@ export default function ProspectsPage() {
           <Card>
             <CardContent className="pt-4 pb-4">
               <p className="text-sm text-muted-foreground">Total Prospects</p>
-              <p className="text-2xl font-bold text-orange-500">{stats.total_persons_with_intent.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-orange-500">{stats.total_prospects.toLocaleString()}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4 pb-4">
               <p className="text-sm text-muted-foreground">Total Signals</p>
-              <p className="text-2xl font-bold">{totalIntents.toLocaleString()}</p>
+              <p className="text-2xl font-bold">{stats.total_signals.toLocaleString()}</p>
             </CardContent>
           </Card>
-          {stats.by_type.slice(0, 2).map(t => (
-            <Card key={t.intent_type}>
-              <CardContent className="pt-4 pb-4">
-                <p className="text-sm text-muted-foreground">{formatIntentType(t.intent_type)}</p>
-                <p className="text-2xl font-bold">{t.count.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">{t.unique_persons} persons</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Intent Type Breakdown — show all types if more than 2 */}
-      {stats && stats.by_type.length > 2 && (
-        <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
-          {stats.by_type.map(t => (
-            <button
-              key={t.intent_type}
-              onClick={() => setIntentType(intentType === t.intent_type ? '' : t.intent_type)}
-              className={`p-2 rounded-lg text-center text-sm transition-colors border ${
-                intentType === t.intent_type
-                  ? 'border-orange-400 bg-orange-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <Badge className={`${getIntentBadgeClass(t.intent_type)} text-xs mb-1`}>
-                {formatIntentType(t.intent_type)}
-              </Badge>
-              <p className="font-semibold text-gray-900">{t.count}</p>
-            </button>
-          ))}
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              <p className="text-sm text-muted-foreground">Replies</p>
+              <p className="text-2xl font-bold text-green-600">{stats.replies.toLocaleString()}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              <p className="text-sm text-muted-foreground">Clicks</p>
+              <p className="text-2xl font-bold text-blue-600">{stats.clicks.toLocaleString()}</p>
+            </CardContent>
+          </Card>
         </div>
       )}
 
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="md:col-span-2">
               <Input
-                placeholder="Search name, email, campaign..."
+                placeholder="Search name, email, company, campaign..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -281,16 +211,6 @@ export default function ProspectsPage() {
             >
               {INTENT_TYPES.map(t => (
                 <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-
-            <select
-              value={source}
-              onChange={e => setSource(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              {SOURCES.map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
 
@@ -311,7 +231,7 @@ export default function ProspectsPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <p className="text-red-600">{error}</p>
-              <Button variant="outline" size="sm" onClick={fetchIntents}>
+              <Button variant="outline" size="sm" onClick={fetchProspects}>
                 Retry
               </Button>
             </div>
@@ -332,7 +252,7 @@ export default function ProspectsPage() {
       )}
 
       {/* Empty State */}
-      {!loading && !error && intents.length === 0 && (
+      {!loading && !error && prospects.length === 0 && (
         <Card>
           <CardContent className="py-12">
             <div className="flex flex-col items-center justify-center text-center">
@@ -358,70 +278,58 @@ export default function ProspectsPage() {
       )}
 
       {/* Table */}
-      {!loading && !error && intents.length > 0 && (
+      {!loading && !error && prospects.length > 0 && (
         <>
           <Card>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Person</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Contact</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Intent Type</TableHead>
+                  <TableHead>Intent</TableHead>
                   <TableHead>Campaign</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Confidence</TableHead>
                   <TableHead>Date</TableHead>
+                  <TableHead className="w-[80px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {intents.map(intent => {
-                  const name = formatName(intent);
-                  const isExpanded = expandedId === intent.id;
+                {prospects.map(prospect => {
+                  const name = formatName(prospect);
 
                   return (
-                    <TableRow
-                      key={intent.id}
-                      className="cursor-pointer hover:bg-orange-50/50"
-                      onClick={() => setExpandedId(isExpanded ? null : intent.id)}
-                    >
+                    <TableRow key={prospect.id} className="hover:bg-orange-50/50">
                       <TableCell className="font-medium">
-                        {name || <span className="text-muted-foreground">-</span>}
+                        {prospect.company_name || <span className="text-muted-foreground">-</span>}
                       </TableCell>
-                      <TableCell>{intent.email}</TableCell>
                       <TableCell>
-                        <Badge className={getIntentBadgeClass(intent.intent_type)}>
-                          {formatIntentType(intent.intent_type)}
+                        <div>
+                          {name || <span className="text-muted-foreground">-</span>}
+                          {prospect.job_title && (
+                            <p className="text-xs text-muted-foreground">{prospect.job_title}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">{prospect.email}</TableCell>
+                      <TableCell>
+                        <Badge className={getIntentBadgeClass(prospect.intent_type)}>
+                          {formatIntentType(prospect.intent_type)}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {intent.campaign_name || <span className="text-muted-foreground">-</span>}
+                        {prospect.campaign_name || <span className="text-muted-foreground">-</span>}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {new Date(prospect.occurred_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        {intent.source ? (
-                          <span className="text-sm capitalize">{intent.source}</span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {intent.confidence !== null ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-orange-500 rounded-full"
-                                style={{ width: `${Math.round(intent.confidence * 100)}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-muted-foreground">
-                              {Math.round(intent.confidence * 100)}%
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {new Date(intent.occurred_at).toLocaleDateString()}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => router.push(`/leads/${prospect.person_id}`)}
+                        >
+                          View
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );
