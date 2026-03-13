@@ -236,6 +236,17 @@ export default function MiningJobResultsPage() {
   const [importLoading, setImportLoading] = useState(false);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
 
+  // Import progress polling
+  const [importStatus, setImportStatus] = useState<string>("idle");
+  const [importProgress, setImportProgress] = useState<{
+    imported?: number;
+    total?: number;
+    skipped?: number;
+    duplicates?: number;
+    errors?: { id: string; error: string }[];
+    completed_at?: string;
+  } | null>(null);
+
   // Filters
   const [search, setSearch] = useState("");
   const [emailFilter, setEmailFilter] = useState<"all" | "with" | "without">(
@@ -360,6 +371,50 @@ export default function MiningJobResultsPage() {
   useEffect(() => {
     fetchResults();
   }, [fetchResults]);
+
+  // Poll import progress every 2s while processing
+  useEffect(() => {
+    if (importStatus !== "processing") return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/mining/jobs/${jobId}/import-status`, {
+          headers: getAuthHeaders() ?? {},
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setImportStatus(data.import_status);
+        setImportProgress(data.progress);
+
+        if (data.import_status === "completed" || data.import_status === "failed") {
+          clearInterval(interval);
+          if (data.import_status === "completed") {
+            fetchResults();
+          }
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [importStatus, jobId]);
+
+  // Check initial import status on mount
+  useEffect(() => {
+    if (!jobId || !isValidUuid(jobId)) return;
+    fetch(`/api/mining/jobs/${jobId}/import-status`, {
+      headers: getAuthHeaders() ?? {},
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data) {
+          setImportStatus(data.import_status);
+          setImportProgress(data.progress);
+        }
+      })
+      .catch(() => {});
+  }, [jobId]);
 
   useEffect(() => {
     setPage(1);
@@ -757,30 +812,9 @@ export default function MiningJobResultsPage() {
 
       const data = await res.json();
 
-      // Build success message — 202 means background processing, stats come from preview
-      let message = `${data.message}`;
-
-      if (importPreview) {
-        message += `\n\nImport preview: ${importPreview.importable} importable out of ${importPreview.with_email} with email`;
-        if (importPreview.already_imported > 0) {
-          message += ` (${importPreview.already_imported} already imported)`;
-        }
-      }
-
-      if (data.tags_applied?.length > 0) {
-        message += `\n\nTags applied: ${data.tags_applied.join(", ")}`;
-      }
-
-      if (data.list_created) {
-        message += `\nList created: "${data.list_created.name}" (${data.list_created.member_count} members)`;
-      }
-
-      message += `\n\nRefresh the page to check import progress.`;
-
-      alert(message);
-
-      // Refresh results to show updated status
-      fetchResults();
+      // Start polling for progress
+      setImportStatus("processing");
+      setImportProgress({ imported: 0, total: importPreview?.importable || 0 });
 
       setShowImportModal(false);
       setImportTags("");
@@ -988,13 +1022,28 @@ export default function MiningJobResultsPage() {
             </button>
           )}
 
-          {/* Import All Button - NEW */}
+          {/* Import All Button */}
           <button
             onClick={openImportModalAll}
-            className="px-4 py-1.5 text-sm text-white bg-green-600 rounded-md hover:bg-green-700"
+            disabled={importStatus === "processing"}
+            className={`px-4 py-1.5 text-sm text-white rounded-md ${
+              importStatus === "processing"
+                ? "bg-yellow-500 cursor-wait"
+                : importStatus === "completed" && importProgress?.completed_at
+                  ? "bg-green-700"
+                  : importStatus === "failed"
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-green-600 hover:bg-green-700"
+            }`}
           >
             <Upload className="h-4 w-4 mr-1 inline" />
-            Import All
+            {importStatus === "processing"
+              ? `Importing... (${importProgress?.imported || 0}/${importProgress?.total || "?"})`
+              : importStatus === "completed" && importProgress?.completed_at
+                ? `Imported (${importProgress?.imported || 0})`
+                : importStatus === "failed"
+                  ? "Import Failed"
+                  : "Import All"}
           </button>
           
           {/* Import Selected Button */}
