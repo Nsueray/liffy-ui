@@ -28,6 +28,7 @@ import {
   Maximize2,
   Minimize2,
   Database,
+  AlertTriangle,
 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -38,7 +39,8 @@ type MiningJobStatus =
   | "running"
   | "completed"
   | "failed"
-  | "paused";
+  | "paused"
+  | "needs_manual";
 type LogLevel = "debug" | "info" | "warn" | "error" | "success";
 
 type JobDetail = {
@@ -111,6 +113,7 @@ function StatusBadge({ status }: { status: MiningJobStatus }) {
     running: "bg-blue-100 text-blue-800 border-blue-200",
     completed: "bg-green-100 text-green-800 border-green-200",
     failed: "bg-red-100 text-red-800 border-red-200",
+    needs_manual: "bg-orange-100 text-orange-800 border-orange-200",
     paused: "bg-gray-100 text-gray-800 border-gray-200",
   };
 
@@ -120,6 +123,7 @@ function StatusBadge({ status }: { status: MiningJobStatus }) {
     completed: <CheckCircle className="h-3 w-3" />,
     failed: <XCircle className="h-3 w-3" />,
     paused: <Pause className="h-3 w-3" />,
+    needs_manual: <AlertTriangle className="h-3 w-3" />,
   };
 
   return (

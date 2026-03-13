@@ -19,7 +19,8 @@ import {
   XCircle,
   Clock,
   Database,
-  Mail
+  Mail,
+  AlertTriangle
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { getAuthHeaders } from "@/lib/auth";
@@ -100,7 +101,7 @@ function RetryJobButton({
 }
 
 // Types matching backend schema
-type MiningJobStatus = "pending" | "running" | "completed" | "failed";
+type MiningJobStatus = "pending" | "running" | "completed" | "failed" | "needs_manual";
 type Strategy = "auto" | "playwright" | "http";
 
 type MiningJob = {
@@ -198,20 +199,22 @@ function StatusBadge({ status }: { status: MiningJobStatus }) {
     pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
     running: "bg-blue-100 text-blue-800 border-blue-200",
     completed: "bg-green-100 text-green-800 border-green-200",
-    failed: "bg-red-100 text-red-800 border-red-200"
+    failed: "bg-red-100 text-red-800 border-red-200",
+    needs_manual: "bg-orange-100 text-orange-800 border-orange-200"
   };
 
-  const icons = {
+  const icons: Record<MiningJobStatus, React.ReactNode> = {
     pending: <Clock className="h-3 w-3" />,
     running: <RefreshCw className="h-3 w-3 animate-spin" />,
     completed: <CheckCircle className="h-3 w-3" />,
-    failed: <XCircle className="h-3 w-3" />
+    failed: <XCircle className="h-3 w-3" />,
+    needs_manual: <AlertTriangle className="h-3 w-3" />
   };
 
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium border ${styles[status]}`}>
       {icons[status]}
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      {status === "needs_manual" ? "Needs Manual" : status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
 }
@@ -535,6 +538,7 @@ export default function MiningJobsPage() {
               <option value="running">Running</option>
               <option value="completed">Completed</option>
               <option value="failed">Failed</option>
+              <option value="needs_manual">Needs Manual</option>
             </select>
           </div>
         </div>
