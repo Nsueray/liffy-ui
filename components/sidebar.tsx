@@ -145,7 +145,10 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
     }
 
     // Fetch dynamic counts
+    let stopped = false;
+
     const fetchCounts = async () => {
+      if (stopped) return;
       const token = localStorage.getItem('liffy_token');
       if (!token) return;
 
@@ -156,6 +159,9 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
         if (response.ok) {
           const data = await response.json();
           setCounts(data);
+        } else if (response.status === 401) {
+          // Token expired or invalid — stop polling to avoid console spam
+          stopped = true;
         }
       } catch {}
     };
@@ -163,7 +169,7 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
     fetchCounts();
     const interval = setInterval(fetchCounts, 30000);
 
-    return () => clearInterval(interval);
+    return () => { stopped = true; clearInterval(interval); };
   }, []);
 
   const handleLogout = async () => {
