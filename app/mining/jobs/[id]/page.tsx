@@ -175,10 +175,18 @@ export default function MiningJobDetailPage() {
           <span
             className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${statusColor}`}
           >
-            {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+            {job.status === "needs_manual" ? "Needs Manual" : job.status.charAt(0).toUpperCase() + job.status.slice(1)}
           </span>
         )}
       </div>
+
+      {/* Manual mining banner */}
+      {job?.status === "needs_manual" && (
+        <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
+          <p className="font-medium">This site could not be mined via cloud mining.</p>
+          <p className="mt-1">The site is likely blocking cloud servers (Cloudflare, CAPTCHA, or IP restriction). It needs to be mined using the local miner from your computer. Check your email for the mining command.</p>
+        </div>
+      )}
 
       {/* Error / Loading durumları */}
       {loading && (

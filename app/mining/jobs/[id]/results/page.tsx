@@ -27,6 +27,7 @@ import {
   List,
   Upload,
   Zap,
+  AlertTriangle,
 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
@@ -1063,6 +1064,17 @@ export default function MiningJobResultsPage() {
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           <AlertCircle className="inline h-4 w-4 mr-1" />
           {error}
+        </div>
+      )}
+
+      {/* Manual mining banner */}
+      {job?.status === "needs_manual" && (
+        <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-medium">This site could not be mined via cloud mining.</p>
+            <p className="mt-1">The site is likely blocking cloud servers. It needs to be mined using the local miner. Check your email for the mining command.</p>
+          </div>
         </div>
       )}
 
