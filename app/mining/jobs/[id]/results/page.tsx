@@ -244,7 +244,10 @@ export default function MiningJobResultsPage() {
     total?: number;
     skipped?: number;
     duplicates?: number;
+    persons_upserted?: number;
+    affiliations_upserted?: number;
     errors?: { id: string; error: string }[];
+    error?: string;
     completed_at?: string;
   } | null>(null);
 
@@ -1058,6 +1061,60 @@ export default function MiningJobResultsPage() {
           </button>
         </div>
       </div>
+
+      {/* Import Progress Bar */}
+      {importStatus === "processing" && importProgress && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+          <div className="flex items-center justify-between text-sm text-green-800 mb-2">
+            <span className="font-medium flex items-center gap-1.5">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              Importing...
+            </span>
+            <span>
+              {importProgress.imported || 0} / {importProgress.total || "?"} imported
+              {importProgress.persons_upserted != null && (
+                <span className="text-green-600 ml-1">
+                  ({importProgress.persons_upserted} persons, {importProgress.affiliations_upserted || 0} affiliations)
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="w-full bg-green-200 rounded-full h-2.5">
+            <div
+              className="bg-green-600 h-2.5 rounded-full transition-all duration-500"
+              style={{ width: `${importProgress.total ? Math.round((importProgress.imported || 0) / importProgress.total * 100) : 0}%` }}
+            />
+          </div>
+          {(importProgress.skipped || 0) > 0 && (
+            <div className="text-xs text-green-600 mt-1">
+              {importProgress.skipped} skipped, {importProgress.duplicates || 0} duplicates
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Import Completed Banner */}
+      {importStatus === "completed" && importProgress && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800 flex items-center gap-2">
+          <CheckCircle className="h-4 w-4 flex-shrink-0" />
+          <span>
+            Import completed: {importProgress.imported || 0} imported
+            {importProgress.persons_upserted != null && ` (${importProgress.persons_upserted} persons, ${importProgress.affiliations_upserted || 0} affiliations)`}
+            {(importProgress.skipped || 0) > 0 && `, ${importProgress.skipped} skipped`}
+          </span>
+        </div>
+      )}
+
+      {/* Import Failed Banner */}
+      {importStatus === "failed" && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 flex items-center gap-2">
+          <XCircle className="h-4 w-4 flex-shrink-0" />
+          <span>
+            Import failed{importProgress?.error ? `: ${importProgress.error}` : ""}.
+            {(importProgress?.imported || 0) > 0 && ` ${importProgress?.imported} were imported before failure.`}
+          </span>
+        </div>
+      )}
 
       {/* Error Alert */}
       {error && (
