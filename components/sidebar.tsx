@@ -34,6 +34,7 @@ import {
   BarChart3,
   Search,
   CheckSquare,
+  Kanban,
 } from "lucide-react";
 import { logoutClient } from "@/lib/auth";
 
@@ -89,6 +90,12 @@ const menuItems = [
     icon: CheckSquare,
     description: "My follow-up tasks",
     badge: { type: "warning", count: 0 }
+  },
+  {
+    name: "Pipeline",
+    href: "/pipeline",
+    icon: Kanban,
+    description: "Sales pipeline board"
   },
   {
     name: "Campaigns",

@@ -52,6 +52,20 @@ interface IntentStats {
   by_type: Array<{ intent_type: string; count: number; unique_persons: number }>;
 }
 
+interface PipelineStageSummary {
+  id: string;
+  name: string;
+  color: string;
+  is_won: boolean;
+  is_lost: boolean;
+  count: number;
+}
+
+interface PipelineBoardResponse {
+  stages: PipelineStageSummary[];
+  total_people: number;
+}
+
 // ── Helpers ────────────────────────────────────────────
 
 const getCampaignBadgeClass = (status: string): string => {
@@ -98,6 +112,7 @@ export default function DashboardPage() {
   const [intentStats, setIntentStats] = useState<IntentStats | null>(null);
   const [recentCampaigns, setRecentCampaigns] = useState<Campaign[]>([]);
   const [recentJobs, setRecentJobs] = useState<MiningJob[]>([]);
+  const [pipeline, setPipeline] = useState<PipelineBoardResponse | null>(null);
 
   useEffect(() => {
     // Get user name from localStorage
@@ -126,6 +141,8 @@ export default function DashboardPage() {
         fetch('/api/campaigns', { headers }).then(r => r.ok ? r.json() : null),
         // 4: Recent mining jobs
         fetch('/api/mining/jobs?limit=5', { headers }).then(r => r.ok ? r.json() : null),
+        // 5: Pipeline board (counts only)
+        fetch('/api/pipeline/board?limit=1', { headers }).then(r => r.ok ? r.json() : null),
       ]);
 
       // Person stats
@@ -158,6 +175,11 @@ export default function DashboardPage() {
       if (results[4].status === 'fulfilled' && results[4].value) {
         const data = results[4].value as MiningJobsResponse;
         setRecentJobs((data.jobs || []).slice(0, 5));
+      }
+
+      // Pipeline board
+      if (results[5].status === 'fulfilled' && results[5].value) {
+        setPipeline(results[5].value as PipelineBoardResponse);
       }
 
       setLoading(false);
@@ -376,6 +398,53 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Pipeline Summary */}
+      {!loading && pipeline && pipeline.stages.length > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Pipeline Summary</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {pipeline.total_people.toLocaleString()} contacts across {pipeline.stages.length} stages
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => router.push('/pipeline')} className="text-xs">
+                View board
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {pipeline.stages.map(s => {
+                const pct = pipeline.total_people > 0
+                  ? (s.count / pipeline.total_people) * 100
+                  : 0;
+                return (
+                  <div key={s.id} className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 w-40 flex-shrink-0">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: s.color }}
+                      />
+                      <span className="text-sm text-gray-700 truncate">{s.name}</span>
+                    </div>
+                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${pct}%`, backgroundColor: s.color }}
+                      />
+                    </div>
+                    <span className="text-sm font-medium text-gray-900 w-10 text-right">
+                      {s.count}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Loading skeleton for recent activity */}
