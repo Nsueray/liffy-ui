@@ -33,6 +33,7 @@ import {
   ShieldCheck,
   BarChart3,
   Search,
+  CheckSquare,
 } from "lucide-react";
 import { logoutClient } from "@/lib/auth";
 
@@ -81,6 +82,13 @@ const menuItems = [
     href: "/verification",
     icon: ShieldCheck,
     description: "Email verification"
+  },
+  {
+    name: "Tasks",
+    href: "/tasks",
+    icon: CheckSquare,
+    description: "My follow-up tasks",
+    badge: { type: "warning", count: 0 }
   },
   {
     name: "Campaigns",
@@ -133,16 +141,40 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
     runningJobs: 0,
     newLeads: 0,
     activeCampaigns: 0,
+    overdueTasks: 0,
   });
+
+  // Current user loaded from localStorage
+  const [currentUser, setCurrentUser] = useState<{
+    email: string;
+    role: string;
+    organizer_name?: string;
+  } | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    
+
     // Load collapsed state from localStorage
     const savedState = localStorage.getItem("sidebar-collapsed");
     if (savedState !== null) {
       setCollapsed(JSON.parse(savedState));
     }
+
+    // Load current user from localStorage (set by login page)
+    try {
+      const rawUser = localStorage.getItem("liffy_user");
+      if (rawUser) {
+        const parsed = JSON.parse(rawUser);
+        // Support both { user: {...}, organizer: {...} } and flat shapes
+        const user = parsed.user || parsed;
+        const organizer = parsed.organizer || {};
+        setCurrentUser({
+          email: user.email || "",
+          role: user.role || "",
+          organizer_name: organizer.name || "",
+        });
+      }
+    } catch {}
 
     // Fetch dynamic counts
     let stopped = false;
@@ -158,7 +190,7 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
         });
         if (response.ok) {
           const data = await response.json();
-          setCounts(data);
+          setCounts((prev) => ({ ...prev, ...data }));
         } else if (response.status === 401) {
           // Token expired or invalid — stop polling to avoid console spam
           stopped = true;
@@ -166,8 +198,33 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
       } catch {}
     };
 
+    const fetchTasksSummary = async () => {
+      if (stopped) return;
+      const token = localStorage.getItem('liffy_token');
+      if (!token) return;
+
+      try {
+        const response = await fetch("/api/tasks/summary", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCounts((prev) => ({
+            ...prev,
+            overdueTasks: data.overdue_count || 0,
+          }));
+        } else if (response.status === 401) {
+          stopped = true;
+        }
+      } catch {}
+    };
+
     fetchCounts();
-    const interval = setInterval(fetchCounts, 30000);
+    fetchTasksSummary();
+    const interval = setInterval(() => {
+      fetchCounts();
+      fetchTasksSummary();
+    }, 30000);
 
     return () => { stopped = true; clearInterval(interval); };
   }, []);
@@ -190,6 +247,9 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
     }
     if (item.name === "Contacts" && counts.newLeads > 0) {
       return { ...item, badge: { type: "success", count: counts.newLeads } };
+    }
+    if (item.name === "Tasks" && counts.overdueTasks > 0) {
+      return { ...item, badge: { type: "warning", count: counts.overdueTasks } };
     }
     if (item.name === "Campaigns" && counts.activeCampaigns > 0) {
       return { ...item, badge: { type: "warning", count: counts.activeCampaigns } };
@@ -394,18 +454,23 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
           )}>
             <div className="relative flex-shrink-0">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-sm font-medium">
-                EA
+                {(currentUser?.email || "?").substring(0, 2).toUpperCase()}
               </div>
               <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border border-white" />
             </div>
             {!collapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                  Elan Admin
+                  {currentUser?.organizer_name || currentUser?.email?.split("@")[0] || "User"}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
-                  admin@elan-expo.com
+                  {currentUser?.email || ""}
                 </p>
+                {currentUser?.role && (
+                  <span className="inline-block mt-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 uppercase">
+                    {currentUser.role}
+                  </span>
+                )}
               </div>
             )}
           </div>
