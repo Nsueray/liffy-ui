@@ -28,6 +28,33 @@ type Props = {
   children: React.ReactNode;
 };
 
+// Decode JWT payload (base64url → JSON). Returns null on any failure.
+function decodeJwtPayload(token: string): { email?: string; role?: string; user_id?: string; organizer_id?: string } | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+// Derive a display name from an email local-part (e.g. "jane.doe@x.com" → "Jane Doe")
+function nameFromEmail(email: string): string {
+  const local = (email.split("@")[0] || "").trim();
+  if (!local) return "User";
+  return (
+    local
+      .split(/[._\-]+/)
+      .filter(Boolean)
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+      .join(" ") || "User"
+  );
+}
+
 export function LayoutClient({ children }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -49,18 +76,26 @@ export function LayoutClient({ children }: Props) {
       return;
     }
 
-    // Get user info from token or localStorage (mock for now)
-    const userData = localStorage.getItem("liffy_user");
-    if (userData) {
-      try {
-        setUser(JSON.parse(userData));
-      } catch {
-        setUser({ name: "Elan Admin", email: "admin@elan-expo.com" });
-      }
-    } else {
-      // Mock user for development
-      setUser({ name: "Elan Admin", email: "admin@elan-expo.com" });
+    // Decode JWT payload to get email. If token is malformed or has no email,
+    // treat it as invalid and force re-login.
+    const payload = decodeJwtPayload(token);
+    if (!payload || !payload.email) {
+      localStorage.removeItem("liffy_token");
+      localStorage.removeItem("liffy_user");
+      router.replace("/login");
+      return;
     }
+
+    const email = payload.email;
+    const name = nameFromEmail(email);
+    const userInfo = { name, email };
+
+    // Persist for other components (sidebar reads liffy_user)
+    try {
+      localStorage.setItem("liffy_user", JSON.stringify(userInfo));
+    } catch {}
+
+    setUser(userInfo);
   }, [isPublicPage, router]);
 
   // Public pages - no shell
@@ -288,13 +323,23 @@ export function useCurrentUser() {
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
 
   useEffect(() => {
+    // Prefer cached liffy_user; fall back to decoding the token directly.
     const userData = localStorage.getItem("liffy_user");
     if (userData) {
       try {
-        setUser(JSON.parse(userData));
-      } catch {
-        setUser({ name: "Elan Admin", email: "admin@elan-expo.com" });
-      }
+        const parsed = JSON.parse(userData);
+        if (parsed && parsed.email) {
+          setUser({ name: parsed.name || nameFromEmail(parsed.email), email: parsed.email });
+          return;
+        }
+      } catch {}
+    }
+
+    const token = localStorage.getItem("liffy_token");
+    if (!token) return;
+    const payload = decodeJwtPayload(token);
+    if (payload && payload.email) {
+      setUser({ name: nameFromEmail(payload.email), email: payload.email });
     }
   }, []);
 
