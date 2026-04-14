@@ -189,7 +189,7 @@ export default function DashboardPage() {
   }, []);
 
   // Derived stats
-  const totalSent = orgOverview?.recipients?.sent ?? orgOverview?.events?.sent ?? 0;
+  const totalSent = orgOverview?.events?.sent ?? orgOverview?.recipients?.total ?? 0;
   const totalOpen = orgOverview?.events?.unique_open ?? orgOverview?.events?.open ?? 0;
   const totalBounce = orgOverview?.events?.unique_bounce ?? orgOverview?.events?.bounce ?? 0;
   const openRate = totalSent > 0 ? ((totalOpen / totalSent) * 100) : 0;
