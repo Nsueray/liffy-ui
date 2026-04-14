@@ -299,9 +299,14 @@ export default function SettingsPage() {
 
   return (
     <div className="p-6 space-y-8 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500">Manage your email infrastructure, verification, and integrations.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+          <p className="text-sm text-gray-500">Manage your email infrastructure, verification, and integrations.</p>
+        </div>
+        <a href="/admin" className="text-sm text-orange-600 hover:text-orange-700 font-medium">
+          Manage Users &rarr;
+        </a>
       </div>
 
       {/* SECTION 1: SENDGRID API KEY */}

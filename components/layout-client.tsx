@@ -88,7 +88,7 @@ export function LayoutClient({ children }: Props) {
 
     const email = payload.email;
     const name = nameFromEmail(email);
-    const userInfo = { name, email };
+    const userInfo = { name, email, role: payload.role || "user", user_id: payload.user_id || null };
 
     // Persist for other components (sidebar reads liffy_user)
     try {
@@ -112,6 +112,7 @@ export function LayoutClient({ children }: Props) {
   const routeTitles: Record<string, string> = {
     '/leads': 'Contacts',
     '/prospects': 'Prospects',
+    '/admin': 'Admin',
   };
 
   // Get page title from pathname

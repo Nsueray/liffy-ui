@@ -35,6 +35,7 @@ import {
   Search,
   CheckSquare,
   Kanban,
+  Shield,
 } from "lucide-react";
 import { logoutClient } from "@/lib/auth";
 
@@ -119,15 +120,22 @@ const menuItems = [
 ];
 
 const bottomMenuItems = [
-  { 
-    name: "Settings", 
-    href: "/settings", 
+  {
+    name: "Admin",
+    href: "/admin",
+    icon: Shield,
+    description: "User management",
+    adminOnly: true,
+  },
+  {
+    name: "Settings",
+    href: "/settings",
     icon: Settings,
     description: "Account settings"
   },
-  { 
-    name: "Help & Support", 
-    href: "/help", 
+  {
+    name: "Help & Support",
+    href: "/help",
     icon: HelpCircle,
     description: "Get help"
   },
@@ -391,7 +399,13 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
           </div>
 
           {/* Bottom Menu Items */}
-          {bottomMenuItems.map((item) => {
+          {bottomMenuItems.filter((item) => {
+            if ((item as any).adminOnly) {
+              const role = currentUser?.role;
+              return role === 'owner' || role === 'admin';
+            }
+            return true;
+          }).map((item) => {
             const Icon = item.icon;
             const isActive = pathname.startsWith(item.href);
             const button = (
