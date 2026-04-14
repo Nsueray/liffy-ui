@@ -36,14 +36,22 @@ import {
   CheckSquare,
   Kanban,
   Shield,
+  Zap,
 } from "lucide-react";
 import { logoutClient } from "@/lib/auth";
 
 // Menu configuration with icons
 const menuItems = [
-  { 
-    name: "Dashboard", 
-    href: "/dashboard", 
+  {
+    name: "Action",
+    href: "/",
+    icon: Zap,
+    description: "Action items & follow-ups",
+    badge: { type: "warning", count: 0 }
+  },
+  {
+    name: "Dashboard",
+    href: "/dashboard",
     icon: LayoutDashboard,
     description: "Overview and analytics"
   },
@@ -157,6 +165,7 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
     newLeads: 0,
     activeCampaigns: 0,
     overdueTasks: 0,
+    actionOpen: 0,
   });
 
   // Current user loaded from localStorage
@@ -234,11 +243,34 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
       } catch {}
     };
 
+    const fetchActionSummary = async () => {
+      if (stopped) return;
+      const token = localStorage.getItem('liffy_token');
+      if (!token) return;
+
+      try {
+        const response = await fetch("/api/actions/summary", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCounts((prev) => ({
+            ...prev,
+            actionOpen: data.total_open || 0,
+          }));
+        } else if (response.status === 401) {
+          stopped = true;
+        }
+      } catch {}
+    };
+
     fetchCounts();
     fetchTasksSummary();
+    fetchActionSummary();
     const interval = setInterval(() => {
       fetchCounts();
       fetchTasksSummary();
+      fetchActionSummary();
     }, 30000);
 
     return () => { stopped = true; clearInterval(interval); };
@@ -257,6 +289,9 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
 
   // Update menu items with dynamic badges
   const menu = menuItems.map(item => {
+    if (item.name === "Action" && counts.actionOpen > 0) {
+      return { ...item, badge: { type: "warning", count: counts.actionOpen } };
+    }
     if (item.name === "Mining Jobs" && counts.runningJobs > 0) {
       return { ...item, badge: { type: "info", count: counts.runningJobs } };
     }
@@ -333,7 +368,7 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {menu.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname.startsWith(item.href);
+            const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             const button = (
               <Link key={item.href} href={item.href} className="block">
                 <Button
@@ -407,7 +442,7 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
             return true;
           }).map((item) => {
             const Icon = item.icon;
-            const isActive = pathname.startsWith(item.href);
+            const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             const button = (
               <Link key={item.href} href={item.href} className="block">
                 <Button
