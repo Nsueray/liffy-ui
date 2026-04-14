@@ -7,6 +7,7 @@ interface Campaign {
   id: string;
   name: string;
   status: string;
+  campaign_type?: string;
   template_id: string;
   template_name?: string;
   template_subject?: string;
@@ -70,6 +71,7 @@ export default function CampaignsPage() {
 
   // Form Inputs
   const [newCampaignName, setNewCampaignName] = useState("");
+  const [campaignType, setCampaignType] = useState<"single" | "sequence">("single");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [selectedListId, setSelectedListId] = useState("");
   const [selectedSenderId, setSelectedSenderId] = useState("");
@@ -276,7 +278,7 @@ export default function CampaignsPage() {
     if (!token) return;
 
     if (!newCampaignName.trim()) { setCreateError("Name is required"); return; }
-    if (!selectedTemplateId) { setCreateError("Template is required"); return; }
+    if (campaignType === "single" && !selectedTemplateId) { setCreateError("Template is required"); return; }
     if (!selectedListId) { setCreateError("List is required"); return; }
     if (!selectedSenderId) { setCreateError("Sender is required"); return; }
 
@@ -289,9 +291,10 @@ export default function CampaignsPage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           name: newCampaignName.trim(),
-          template_id: selectedTemplateId,
+          template_id: campaignType === "single" ? selectedTemplateId : undefined,
           list_id: selectedListId,
-          sender_id: selectedSenderId
+          sender_id: selectedSenderId,
+          campaign_type: campaignType,
         }),
       });
 
@@ -300,9 +303,10 @@ export default function CampaignsPage() {
 
       setCampaigns((prev) => [data, ...prev]);
       setShowCreateModal(false);
-      
+
       // Reset Form
       setNewCampaignName("");
+      setCampaignType("single");
       setSelectedTemplateId("");
       setSelectedListId("");
       setSelectedSenderId("");
@@ -381,6 +385,7 @@ export default function CampaignsPage() {
                         <Link href={`/campaigns/${c.id}`} className="text-blue-600 hover:text-blue-800 hover:underline">
                           {c.name}
                         </Link>
+                        {c.campaign_type === "sequence" && <span className="ml-2 px-1.5 py-0.5 text-[10px] rounded bg-indigo-100 text-indigo-700 font-semibold">SEQ</span>}
                       </td>
                       <td className="px-6 py-4"><span className={`px-2 py-1 text-xs rounded-full font-semibold ${getStatusBadge(c.status)}`}>{c.status}</span></td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.recipient_count ?? "-"}</td>
@@ -479,18 +484,35 @@ export default function CampaignsPage() {
             <form onSubmit={handleCreateCampaign} className="space-y-4">
                 <div>
                     <label className="block text-sm font-medium mb-1">Campaign Name</label>
-                    <input type="text" className="w-full border rounded px-3 py-2" 
+                    <input type="text" className="w-full border rounded px-3 py-2"
                         value={newCampaignName} onChange={e => setNewCampaignName(e.target.value)} placeholder="e.g. Q1 Outreach" />
                 </div>
 
                 <div>
+                    <label className="block text-sm font-medium mb-1">Campaign Type</label>
+                    <div className="flex gap-3">
+                      <label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center text-sm ${campaignType === "single" ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}>
+                        <input type="radio" name="campaignType" value="single" checked={campaignType === "single"} onChange={() => setCampaignType("single")} className="sr-only" />
+                        Single Email
+                      </label>
+                      <label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center text-sm ${campaignType === "sequence" ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}>
+                        <input type="radio" name="campaignType" value="sequence" checked={campaignType === "sequence"} onChange={() => setCampaignType("sequence")} className="sr-only" />
+                        Email Sequence
+                      </label>
+                    </div>
+                    {campaignType === "sequence" && <p className="text-xs text-gray-500 mt-1">Multi-touch sequence — configure steps after creating the campaign.</p>}
+                </div>
+
+                {campaignType === "single" && (
+                <div>
                     <label className="block text-sm font-medium mb-1">Select Template</label>
-                    <select className="w-full border rounded px-3 py-2" 
+                    <select className="w-full border rounded px-3 py-2"
                         value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)}>
                         <option value="">-- Choose Template --</option>
                         {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                 </div>
+                )}
 
                 <div>
                     <label className="block text-sm font-medium mb-1">Select List (Audience)</label>

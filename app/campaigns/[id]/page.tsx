@@ -18,6 +18,7 @@ interface Campaign {
   id: string;
   name: string;
   status: string;
+  campaign_type?: string;
   template_id: string;
   template_name?: string;
   template_subject?: string;
@@ -307,6 +308,7 @@ export default function CampaignDetailPage() {
             <span className={`px-3 py-1 text-sm rounded-full font-semibold ${getCampaignStatusBadge(campaign.status)}`}>
               {campaign.status}
             </span>
+            {campaign.campaign_type === "sequence" && <span className="px-2 py-0.5 text-xs rounded bg-indigo-100 text-indigo-700 font-semibold">Sequence</span>}
             <span className="text-gray-500 text-sm">Created {formatDate(campaign.created_at)}</span>
             {campaign.started_at && (
               <span className="text-gray-500 text-sm">Started {formatDate(campaign.started_at)}</span>
@@ -334,6 +336,14 @@ export default function CampaignDetailPage() {
           <p className="font-medium text-2xl">{campaign.recipient_count || 0}</p>
         </div>
       </div>
+
+      {/* Sequence Builder Link (only for sequence campaigns) */}
+      {campaign.campaign_type === "sequence" && (
+        <Link href={`/campaigns/${campaign.id}/sequences`}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100 text-sm font-medium">
+          Sequence Builder &rarr;
+        </Link>
+      )}
 
       {/* Analytics Summary Cards */}
       {summary ? (
