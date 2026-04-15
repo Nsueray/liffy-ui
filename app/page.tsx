@@ -94,6 +94,8 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(days / 7)}w ago`;
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.liffy.app";
+
 export default function ActionScreen() {
   useAuthGuard();
   const router = useRouter();
@@ -123,8 +125,8 @@ export default function ActionScreen() {
       if (triggerFilter !== "all") params.set("trigger_reason", triggerFilter);
 
       const [itemsRes, summaryRes] = await Promise.all([
-        fetch(`/api/actions?${params}`, { headers }),
-        fetch("/api/actions/summary", { headers }),
+        fetch(`${API_BASE}/api/actions?${params}`, { headers }),
+        fetch(`${API_BASE}/api/actions/summary`, { headers }),
       ]);
 
       if (itemsRes.ok) {
@@ -151,7 +153,7 @@ export default function ActionScreen() {
   const updateStatus = async (id: string, status: string, extra?: Record<string, unknown>) => {
     const headers = getHeaders();
     try {
-      const res = await fetch(`/api/actions/${id}`, {
+      const res = await fetch(`${API_BASE}/api/actions/${id}`, {
         method: "PATCH",
         headers,
         body: JSON.stringify({ status, ...extra }),
@@ -174,7 +176,7 @@ export default function ActionScreen() {
   const fetchHistory = async () => {
     const headers = getHeaders();
     try {
-      const res = await fetch("/api/actions/history?limit=50", { headers });
+      const res = await fetch(`${API_BASE}/api/actions/history?limit=50`, { headers });
       if (res.ok) {
         const data = await res.json();
         setHistoryItems(data.items || []);
