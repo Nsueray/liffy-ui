@@ -101,12 +101,6 @@ const menuItems = [
     badge: { type: "warning", count: 0 }
   },
   {
-    name: "Pipeline",
-    href: "/pipeline",
-    icon: Kanban,
-    description: "Sales pipeline board"
-  },
-  {
     name: "Campaigns",
     href: "/campaigns",
     icon: Send,
