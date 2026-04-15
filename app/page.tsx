@@ -29,6 +29,7 @@ import {
   RefreshCw,
   History,
 } from "lucide-react";
+import { ContactDrawer } from "@/components/ContactDrawer";
 
 // Types
 interface ActionItem {
@@ -109,6 +110,8 @@ export default function ActionScreen() {
   const [snoozeDays, setSnoozeDays] = useState(1);
   const [showHistory, setShowHistory] = useState(false);
   const [historyItems, setHistoryItems] = useState<ActionItem[]>([]);
+  const [drawerPersonId, setDrawerPersonId] = useState<string | null>(null);
+  const [drawerActionId, setDrawerActionId] = useState<string | null>(null);
 
   const getHeaders = () => {
     const token = typeof window !== "undefined" ? localStorage.getItem("liffy_token") : null;
@@ -242,7 +245,8 @@ export default function ActionScreen() {
     return (
       <div
         key={item.id}
-        className={`flex items-center gap-4 p-4 border rounded-lg mb-2 hover:shadow-sm transition-shadow ${pConfig.bg}`}
+        className={`flex items-center gap-4 p-4 border rounded-lg mb-2 hover:shadow-sm transition-shadow cursor-pointer ${pConfig.bg}`}
+        onClick={() => { setDrawerPersonId(item.person_id); setDrawerActionId(item.id); }}
       >
         {/* Priority dot */}
         <div className="flex-shrink-0">
@@ -284,7 +288,7 @@ export default function ActionScreen() {
             variant="ghost"
             size="sm"
             className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
-            onClick={() => updateStatus(item.id, "done")}
+            onClick={(e) => { e.stopPropagation(); updateStatus(item.id, "done"); }}
             title="Mark Done"
           >
             <Check className="h-4 w-4" />
@@ -293,14 +297,14 @@ export default function ActionScreen() {
             variant="ghost"
             size="sm"
             className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            onClick={() => updateStatus(item.id, "dismissed")}
+            onClick={(e) => { e.stopPropagation(); updateStatus(item.id, "dismissed"); }}
             title="Dismiss"
           >
             <X className="h-4 w-4" />
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -493,6 +497,20 @@ export default function ActionScreen() {
             items.map(renderItem)
           )}
         </div>
+      )}
+
+      {/* Contact Drawer */}
+      {drawerPersonId && (
+        <ContactDrawer
+          personId={drawerPersonId}
+          actionId={drawerActionId}
+          onClose={() => { setDrawerPersonId(null); setDrawerActionId(null); }}
+          onResolve={(actionId, status) => {
+            updateStatus(actionId, status);
+            setDrawerPersonId(null);
+            setDrawerActionId(null);
+          }}
+        />
       )}
     </div>
   );
