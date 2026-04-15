@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Download } from 'lucide-react';
+import { Download, X, Building2 } from 'lucide-react';
 
 interface Person {
   id: string;
@@ -117,6 +117,12 @@ export default function ContactsPage() {
 
   const [stats, setStats] = useState<PersonStats | null>(null);
 
+  // Company autocomplete
+  const [companySuggestions, setCompanySuggestions] = useState<Array<{ company_name: string; contact_count: number }>>([]);
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [companyInputValue, setCompanyInputValue] = useState('');
+  const [debouncedCompanyInput, setDebouncedCompanyInput] = useState('');
+
   // Detail panel
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PersonDetail | null>(null);
@@ -129,6 +135,27 @@ export default function ContactsPage() {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedCompanyInput(companyInputValue), 300);
+    return () => clearTimeout(t);
+  }, [companyInputValue]);
+
+  // Fetch company suggestions
+  useEffect(() => {
+    if (!debouncedCompanyInput || debouncedCompanyInput.length < 2) {
+      setCompanySuggestions([]);
+      return;
+    }
+    const token = getToken();
+    if (!token) return;
+    fetch(`${API_BASE}/api/persons/companies?q=${encodeURIComponent(debouncedCompanyInput)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.ok ? res.json() : { companies: [] })
+      .then(data => setCompanySuggestions(data.companies || []))
+      .catch(() => setCompanySuggestions([]));
+  }, [debouncedCompanyInput]);
 
   useEffect(() => {
     setPage(1);
@@ -255,6 +282,8 @@ export default function ContactsPage() {
     setVerificationStatus('exclude_invalid');
     setCountry('');
     setCompany('');
+    setCompanyInputValue('');
+    setCompanySuggestions([]);
   };
 
   const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
@@ -357,10 +386,10 @@ export default function ContactsPage() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
             <div className="md:col-span-2">
               <Input
-                placeholder="Search name, email, company..."
+                placeholder="Search name, email..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -384,11 +413,65 @@ export default function ContactsPage() {
               onChange={e => setCountry(e.target.value)}
             />
 
-            <Input
-              placeholder="Filter by company..."
-              value={company}
-              onChange={e => setCompany(e.target.value)}
-            />
+            <div className="relative md:col-span-2">
+              <div className="flex items-center gap-1">
+                <Building2 className="h-4 w-4 text-gray-400 absolute left-3 z-10" />
+                <Input
+                  placeholder="Filter by company..."
+                  value={company || companyInputValue}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setCompanyInputValue(val);
+                    if (!val) {
+                      setCompany('');
+                      setShowCompanyDropdown(false);
+                    } else {
+                      setShowCompanyDropdown(true);
+                    }
+                  }}
+                  onFocus={() => {
+                    if (companyInputValue.length >= 2) setShowCompanyDropdown(true);
+                  }}
+                  onBlur={() => {
+                    // Delay to allow click on suggestion
+                    setTimeout(() => setShowCompanyDropdown(false), 200);
+                  }}
+                  className="pl-9"
+                />
+                {(company || companyInputValue) && (
+                  <button
+                    onClick={() => {
+                      setCompany('');
+                      setCompanyInputValue('');
+                      setCompanySuggestions([]);
+                      setShowCompanyDropdown(false);
+                    }}
+                    className="absolute right-3 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              {showCompanyDropdown && companySuggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-md shadow-lg z-20 max-h-48 overflow-y-auto">
+                  {companySuggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 flex items-center justify-between"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setCompany(s.company_name);
+                        setCompanyInputValue(s.company_name);
+                        setShowCompanyDropdown(false);
+                      }}
+                    >
+                      <span className="truncate">{s.company_name}</span>
+                      <span className="text-xs text-gray-400 ml-2 flex-shrink-0">{s.contact_count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <Button
               variant="outline"
@@ -400,6 +483,28 @@ export default function ContactsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Active company filter badge */}
+      {company && (
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="px-3 py-1.5 text-sm flex items-center gap-2 border-orange-300 text-orange-700 bg-orange-50">
+            <Building2 className="h-3.5 w-3.5" />
+            Company: {company}
+            <button
+              onClick={() => {
+                setCompany('');
+                setCompanyInputValue('');
+              }}
+              className="ml-1 hover:text-orange-900"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+          <span className="text-xs text-gray-400">
+            {total} contact{total !== 1 ? 's' : ''} found
+          </span>
+        </div>
+      )}
 
       {/* Error */}
       {error && (
