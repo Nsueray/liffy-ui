@@ -130,14 +130,20 @@ export function ContactDrawer({ personId, actionId, onClose, onResolve }: Contac
       if (personRes.ok) {
         const data = await personRes.json();
         setPerson(data.person || data);
+      } else {
+        console.warn("[ContactDrawer] Person fetch failed:", personRes.status);
       }
       if (timelineRes.ok) {
         const data = await timelineRes.json();
         setTimeline(data.timeline || []);
+      } else {
+        console.warn("[ContactDrawer] Timeline fetch failed:", timelineRes.status);
       }
       if (contextRes.ok) {
         const data = await contextRes.json();
         setCards(data.cards || []);
+      } else {
+        console.warn("[ContactDrawer] Context cards failed:", contextRes.status, contextRes.statusText);
       }
     } catch (err) {
       console.error("Failed to fetch drawer data:", err);
