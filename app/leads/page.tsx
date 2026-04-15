@@ -24,6 +24,7 @@ interface Person {
   city: string | null;
   website: string | null;
   phone: string | null;
+  industry: string | null;
   has_intent: boolean;
 }
 
@@ -113,9 +114,11 @@ export default function ContactsPage() {
   const [verificationStatus, setVerificationStatus] = useState('exclude_invalid');
   const [country, setCountry] = useState('');
   const [company, setCompany] = useState('');
+  const [industry, setIndustry] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   const [stats, setStats] = useState<PersonStats | null>(null);
+  const [industries, setIndustries] = useState<Array<{ industry: string; contact_count: number }>>([]);
 
   // Company autocomplete
   const [companySuggestions, setCompanySuggestions] = useState<Array<{ company_name: string; contact_count: number }>>([]);
@@ -159,20 +162,25 @@ export default function ContactsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, verificationStatus, country, company]);
+  }, [debouncedSearch, verificationStatus, country, company, industry]);
 
-  // Fetch stats
+  // Fetch stats + industries
   const fetchStats = useCallback(async () => {
     const token = getToken();
     if (!token) return;
 
     try {
-      const res = await fetch(`${API_BASE}/api/persons/stats`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const [statsRes, indRes] = await Promise.all([
+        fetch(`${API_BASE}/api/persons/stats`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE}/api/persons/industries`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (statsRes.ok) {
+        const data = await statsRes.json();
         setStats(data as PersonStats);
+      }
+      if (indRes.ok) {
+        const data = await indRes.json();
+        setIndustries(data.industries || []);
       }
     } catch (err) {
       console.error('Failed to fetch stats', err);
@@ -194,6 +202,7 @@ export default function ContactsPage() {
       if (verificationStatus) params.append('verification_status', verificationStatus);
       if (country) params.append('country', country);
       if (company) params.append('company', company);
+      if (industry) params.append('industry', industry);
 
       const token = getToken();
 
@@ -214,7 +223,7 @@ export default function ContactsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, debouncedSearch, verificationStatus, country, company]);
+  }, [page, limit, debouncedSearch, verificationStatus, country, company, industry]);
 
   useEffect(() => {
     fetchPersons();
@@ -275,7 +284,7 @@ export default function ContactsPage() {
   };
 
   const totalPages = Math.ceil(total / limit);
-  const hasActiveFilters = search || (verificationStatus && verificationStatus !== 'exclude_invalid') || country || company;
+  const hasActiveFilters = search || (verificationStatus && verificationStatus !== 'exclude_invalid') || country || company || industry;
 
   const clearFilters = () => {
     setSearch('');
@@ -284,6 +293,7 @@ export default function ContactsPage() {
     setCompany('');
     setCompanyInputValue('');
     setCompanySuggestions([]);
+    setIndustry('');
   };
 
   const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
@@ -311,6 +321,7 @@ export default function ContactsPage() {
       if (verificationStatus) params.set('verification_status', verificationStatus);
       if (country) params.set('country', country);
       if (company) params.set('company', company);
+      if (industry) params.set('industry', industry);
 
       const response = await fetch(`${API_BASE}/api/persons/export?${params}`, {
         headers: { Authorization: `Bearer ${getToken()}` },
@@ -473,6 +484,19 @@ export default function ContactsPage() {
               )}
             </div>
 
+            <select
+              value={industry}
+              onChange={e => setIndustry(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <option value="">All Industries</option>
+              {industries.map(ind => (
+                <option key={ind.industry} value={ind.industry}>
+                  {ind.industry} ({ind.contact_count})
+                </option>
+              ))}
+            </select>
+
             <Button
               variant="outline"
               onClick={clearFilters}
@@ -484,22 +508,35 @@ export default function ContactsPage() {
         </CardContent>
       </Card>
 
-      {/* Active company filter badge */}
-      {company && (
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="px-3 py-1.5 text-sm flex items-center gap-2 border-orange-300 text-orange-700 bg-orange-50">
-            <Building2 className="h-3.5 w-3.5" />
-            Company: {company}
-            <button
-              onClick={() => {
-                setCompany('');
-                setCompanyInputValue('');
-              }}
-              className="ml-1 hover:text-orange-900"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </Badge>
+      {/* Active filter badges */}
+      {(company || industry) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {company && (
+            <Badge variant="outline" className="px-3 py-1.5 text-sm flex items-center gap-2 border-orange-300 text-orange-700 bg-orange-50">
+              <Building2 className="h-3.5 w-3.5" />
+              Company: {company}
+              <button
+                onClick={() => {
+                  setCompany('');
+                  setCompanyInputValue('');
+                }}
+                className="ml-1 hover:text-orange-900"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          {industry && (
+            <Badge variant="outline" className="px-3 py-1.5 text-sm flex items-center gap-2 border-blue-300 text-blue-700 bg-blue-50">
+              Industry: {industry}
+              <button
+                onClick={() => setIndustry('')}
+                className="ml-1 hover:text-blue-900"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
           <span className="text-xs text-gray-400">
             {total} contact{total !== 1 ? 's' : ''} found
           </span>
