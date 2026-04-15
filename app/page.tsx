@@ -30,6 +30,7 @@ import {
   History,
 } from "lucide-react";
 import { ContactDrawer } from "@/components/ContactDrawer";
+import { TopNav } from "@/components/TopNav";
 
 // Types
 interface ActionItem {
@@ -330,10 +331,7 @@ export default function ActionScreen() {
   if (loading) {
     return (
       <div className="p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <Zap className="h-6 w-6 text-orange-500" />
-          <h1 className="text-2xl font-bold">Action Center</h1>
-        </div>
+        <TopNav actionCount={0} />
         <div className="animate-pulse space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="h-20 bg-gray-100 rounded-lg" />
@@ -345,15 +343,11 @@ export default function ActionScreen() {
 
   return (
     <div className="p-6 max-w-5xl">
+      <TopNav actionCount={summary?.total_open} />
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2">
-          <Zap className="h-6 w-6 text-orange-500" />
-          <h1 className="text-2xl font-bold">Action Center</h1>
-          {summary && summary.total_open > 0 && (
-            <Badge className="bg-orange-500 text-white">{summary.total_open}</Badge>
-          )}
-        </div>
+        <div />
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={fetchData}>
             <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
