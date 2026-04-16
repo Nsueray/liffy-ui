@@ -9,6 +9,7 @@ interface Sender {
   from_name: string;
   from_email: string;
   is_active: boolean;
+  visibility: 'public' | 'private';
 }
 
 export default function SettingsPage() {
@@ -29,6 +30,7 @@ export default function SettingsPage() {
   const [showSenderModal, setShowSenderModal] = useState(false);
   const [newSenderName, setNewSenderName] = useState('');
   const [newSenderEmail, setNewSenderEmail] = useState('');
+  const [newSenderVisibility, setNewSenderVisibility] = useState<'public' | 'private'>('public');
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -148,7 +150,8 @@ export default function SettingsPage() {
           from_name: newSenderName,
           from_email: newSenderEmail,
           label: `${newSenderName} (${newSenderEmail})`,
-          is_default: senders.length === 0
+          is_default: senders.length === 0,
+          visibility: newSenderVisibility
         })
       });
 
@@ -159,6 +162,7 @@ export default function SettingsPage() {
       setShowSenderModal(false);
       setNewSenderName('');
       setNewSenderEmail('');
+      setNewSenderVisibility('public');
     } catch (err: any) {
       setCreateError(err.message);
     } finally {
@@ -364,13 +368,14 @@ export default function SettingsPage() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Visibility</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {senders.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-6 py-4 text-center text-sm text-gray-500">
+                  <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">
                     No senders added yet. Please add one to start sending campaigns.
                   </td>
                 </tr>
@@ -379,6 +384,13 @@ export default function SettingsPage() {
                   <tr key={s.id}>
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">{s.from_name}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">{s.from_email}</td>
+                    <td className="px-6 py-4">
+                      {s.visibility === 'private' ? (
+                        <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full">Private</span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">Public</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4">
                       {s.is_active ? (
                         <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">Active</span>
@@ -651,6 +663,36 @@ export default function SettingsPage() {
                 <p className="text-xs text-orange-600 mt-1">
                   Make sure this email is verified in your SendGrid account (Sender Authentication).
                 </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Visibility</label>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="sender-visibility"
+                      value="public"
+                      checked={newSenderVisibility === 'public'}
+                      onChange={() => setNewSenderVisibility('public')}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm">Public</span>
+                    <span className="text-xs text-gray-400">(everyone)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="sender-visibility"
+                      value="private"
+                      checked={newSenderVisibility === 'private'}
+                      onChange={() => setNewSenderVisibility('private')}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm">Private</span>
+                    <span className="text-xs text-gray-400">(you + managers)</span>
+                  </label>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t">

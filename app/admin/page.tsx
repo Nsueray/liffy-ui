@@ -15,6 +15,8 @@ interface User {
   first_name: string | null;
   last_name: string | null;
   daily_email_limit: number;
+  reports_to: string | null;
+  manager_id: string | null;
   created_at: string;
 }
 
@@ -30,11 +32,22 @@ function roleBadge(role: string) {
   const map: Record<string, string> = {
     owner: 'bg-purple-100 text-purple-700',
     admin: 'bg-blue-100 text-blue-700',
+    manager: 'bg-indigo-100 text-indigo-700',
+    sales_rep: 'bg-green-100 text-green-700',
+    staff: 'bg-gray-100 text-gray-700',
     user: 'bg-green-100 text-green-700',
+  };
+  const labels: Record<string, string> = {
+    sales_rep: 'Sales Rep',
+    owner: 'Owner',
+    admin: 'Admin',
+    manager: 'Manager',
+    staff: 'Staff',
+    user: 'User',
   };
   return (
     <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${map[role] || 'bg-gray-100 text-gray-700'}`}>
-      {role}
+      {labels[role] || role}
     </span>
   );
 }
@@ -68,8 +81,9 @@ export default function AdminPage() {
   const [addPassword, setAddPassword] = useState('');
   const [addFirstName, setAddFirstName] = useState('');
   const [addLastName, setAddLastName] = useState('');
-  const [addRole, setAddRole] = useState('user');
+  const [addRole, setAddRole] = useState('sales_rep');
   const [addLimit, setAddLimit] = useState('1000');
+  const [addReportsTo, setAddReportsTo] = useState('');
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
 
@@ -78,6 +92,7 @@ export default function AdminPage() {
   const [editLastName, setEditLastName] = useState('');
   const [editRole, setEditRole] = useState('');
   const [editLimit, setEditLimit] = useState('');
+  const [editReportsTo, setEditReportsTo] = useState('');
   const [editActive, setEditActive] = useState(true);
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState('');
@@ -171,13 +186,14 @@ export default function AdminPage() {
           first_name: addFirstName || undefined,
           last_name: addLastName || undefined,
           daily_email_limit: parseInt(addLimit, 10) || 1000,
+          reports_to: addReportsTo || undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) { setAddError(data.error || 'Failed to create user'); return; }
       setShowAdd(false);
       setAddEmail(''); setAddPassword(''); setAddFirstName(''); setAddLastName('');
-      setAddRole('user'); setAddLimit('1000');
+      setAddRole('sales_rep'); setAddLimit('1000'); setAddReportsTo('');
       fetchUsers();
     } catch (err: any) {
       setAddError(err.message);
@@ -193,6 +209,7 @@ export default function AdminPage() {
     setEditLastName(u.last_name || '');
     setEditRole(u.role);
     setEditLimit(String(u.daily_email_limit || 0));
+    setEditReportsTo(u.reports_to || u.manager_id || '');
     setEditActive(u.is_active);
     setEditError('');
   };
@@ -213,6 +230,7 @@ export default function AdminPage() {
           last_name: editLastName,
           role: editRole,
           daily_email_limit: parseInt(editLimit, 10) || 0,
+          reports_to: editReportsTo || null,
           is_active: editActive,
         }),
       });
@@ -287,9 +305,9 @@ export default function AdminPage() {
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Role</th>
+                <th className="px-4 py-3 font-medium">Reports To</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Daily Limit</th>
-                <th className="px-4 py-3 font-medium">Created</th>
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -304,9 +322,14 @@ export default function AdminPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-600">{u.email}</td>
                     <td className="px-4 py-3">{roleBadge(u.role)}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">
+                      {(() => {
+                        const mgr = users.find(m => m.id === (u.reports_to || u.manager_id));
+                        return mgr ? `${mgr.first_name || ''} ${mgr.last_name || mgr.email}`.trim() : <span className="text-gray-300">-</span>;
+                      })()}
+                    </td>
                     <td className="px-4 py-3">{statusBadge(u.is_active)}</td>
                     <td className="px-4 py-3 text-gray-600">{u.daily_email_limit?.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-gray-500">{new Date(u.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-right space-x-2">
                       <button
                         onClick={() => {
@@ -385,8 +408,9 @@ export default function AdminPage() {
                   <label className="block text-sm font-medium mb-1">Role</label>
                   <select value={addRole} onChange={e => setAddRole(e.target.value)}
                     className="w-full border rounded px-3 py-2 text-sm">
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
+                    <option value="sales_rep">Sales Rep</option>
+                    <option value="manager">Manager</option>
+                    <option value="staff">Staff</option>
                     {currentRole === 'owner' && <option value="owner">Owner</option>}
                   </select>
                 </div>
@@ -395,6 +419,18 @@ export default function AdminPage() {
                   <input type="number" min={0} value={addLimit} onChange={e => setAddLimit(e.target.value)}
                     className="w-full border rounded px-3 py-2 text-sm" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Reports To</label>
+                <select value={addReportsTo} onChange={e => setAddReportsTo(e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm">
+                  <option value="">None (top-level)</option>
+                  {users.filter(u => u.id !== currentUserId || u.role === 'owner').map(u => (
+                    <option key={u.id} value={u.id}>
+                      {`${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email} ({u.role})
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <button type="button" onClick={() => setShowAdd(false)}
@@ -438,8 +474,11 @@ export default function AdminPage() {
                     className="w-full border rounded px-3 py-2 text-sm"
                     disabled={showEdit.id === currentUserId && showEdit.role === 'owner'}
                   >
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
+                    <option value="sales_rep">Sales Rep</option>
+                    <option value="manager">Manager</option>
+                    <option value="staff">Staff</option>
+                    <option value="user">User (legacy)</option>
+                    <option value="admin">Admin (legacy)</option>
                     {currentRole === 'owner' && <option value="owner">Owner</option>}
                   </select>
                   {showEdit.id === currentUserId && showEdit.role === 'owner' && (
@@ -451,6 +490,18 @@ export default function AdminPage() {
                   <input type="number" min={0} value={editLimit} onChange={e => setEditLimit(e.target.value)}
                     className="w-full border rounded px-3 py-2 text-sm" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Reports To</label>
+                <select value={editReportsTo} onChange={e => setEditReportsTo(e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm">
+                  <option value="">None (top-level)</option>
+                  {users.filter(u => u.id !== showEdit?.id).map(u => (
+                    <option key={u.id} value={u.id}>
+                      {`${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email} ({u.role})
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium">Active</label>

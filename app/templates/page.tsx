@@ -9,6 +9,8 @@ interface EmailTemplate {
   subject: string;
   body_html: string;
   body_text: string | null;
+  visibility: 'public' | 'private';
+  created_by_user_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -90,7 +92,8 @@ export default function TemplatesPage() {
   const [formData, setFormData] = useState({
     name: '',
     subject: '',
-    body_html: ''
+    body_html: '',
+    visibility: 'public' as 'public' | 'private'
   });
 
   const [editorMode, setEditorMode] = useState<'visual' | 'html'>('visual');
@@ -160,7 +163,7 @@ export default function TemplatesPage() {
 
   const openCreateModal = () => {
     setEditingTemplate(null);
-    setFormData({ name: '', subject: '', body_html: '' });
+    setFormData({ name: '', subject: '', body_html: '', visibility: 'public' });
     setEditorMode('visual');
     setShowModal(true);
   };
@@ -170,7 +173,8 @@ export default function TemplatesPage() {
     setFormData({
       name: template.name,
       subject: template.subject,
-      body_html: template.body_html
+      body_html: template.body_html,
+      visibility: template.visibility || 'public'
     });
     setEditorMode('visual');
     setShowModal(true);
@@ -223,7 +227,7 @@ export default function TemplatesPage() {
       }
 
       setShowModal(false);
-      setFormData({ name: '', subject: '', body_html: '' });
+      setFormData({ name: '', subject: '', body_html: '', visibility: 'public' });
       setEditingTemplate(null);
       fetchTemplates();
     } catch (err) {
@@ -358,6 +362,9 @@ export default function TemplatesPage() {
                     Subject
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Visibility
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Created
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -373,6 +380,13 @@ export default function TemplatesPage() {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
                       {template.subject}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {template.visibility === 'private' ? (
+                        <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full">Private</span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">Public</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatDate(template.created_at)}
@@ -446,6 +460,40 @@ export default function TemplatesPage() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:bg-gray-100"
                         placeholder="Template name"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Visibility
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="visibility"
+                            value="public"
+                            checked={formData.visibility === 'public'}
+                            onChange={() => setFormData(prev => ({ ...prev, visibility: 'public' }))}
+                            disabled={submitting}
+                            className="text-orange-600 focus:ring-orange-500"
+                          />
+                          <span className="text-sm text-gray-700">Public</span>
+                          <span className="text-xs text-gray-400">(everyone in org)</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="visibility"
+                            value="private"
+                            checked={formData.visibility === 'private'}
+                            onChange={() => setFormData(prev => ({ ...prev, visibility: 'private' }))}
+                            disabled={submitting}
+                            className="text-orange-600 focus:ring-orange-500"
+                          />
+                          <span className="text-sm text-gray-700">Private</span>
+                          <span className="text-xs text-gray-400">(you + managers above)</span>
+                        </label>
+                      </div>
                     </div>
 
                     <div>
