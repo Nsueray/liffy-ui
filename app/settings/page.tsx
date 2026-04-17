@@ -9,7 +9,7 @@ interface Sender {
   from_name: string;
   from_email: string;
   is_active: boolean;
-  visibility: 'public' | 'private';
+  visibility: 'shared' | 'private';
 }
 
 export default function SettingsPage() {
@@ -30,7 +30,7 @@ export default function SettingsPage() {
   const [showSenderModal, setShowSenderModal] = useState(false);
   const [newSenderName, setNewSenderName] = useState('');
   const [newSenderEmail, setNewSenderEmail] = useState('');
-  const [newSenderVisibility, setNewSenderVisibility] = useState<'public' | 'private'>('public');
+  const [newSenderVisibility, setNewSenderVisibility] = useState<'shared' | 'private'>('shared');
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -162,7 +162,7 @@ export default function SettingsPage() {
       setShowSenderModal(false);
       setNewSenderName('');
       setNewSenderEmail('');
-      setNewSenderVisibility('public');
+      setNewSenderVisibility('shared');
     } catch (err: any) {
       setCreateError(err.message);
     } finally {
@@ -672,9 +672,9 @@ export default function SettingsPage() {
                     <input
                       type="radio"
                       name="sender-visibility"
-                      value="public"
-                      checked={newSenderVisibility === 'public'}
-                      onChange={() => setNewSenderVisibility('public')}
+                      value="shared"
+                      checked={newSenderVisibility === 'shared'}
+                      onChange={() => setNewSenderVisibility('shared')}
                       className="text-blue-600 focus:ring-blue-500"
                     />
                     <span className="text-sm">Public</span>

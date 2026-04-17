@@ -9,7 +9,7 @@ interface EmailTemplate {
   subject: string;
   body_html: string;
   body_text: string | null;
-  visibility: 'public' | 'private';
+  visibility: 'shared' | 'private';
   created_by_user_id: string | null;
   created_at: string;
   updated_at: string;
@@ -93,7 +93,7 @@ export default function TemplatesPage() {
     name: '',
     subject: '',
     body_html: '',
-    visibility: 'public' as 'public' | 'private'
+    visibility: 'shared' as 'shared' | 'private'
   });
 
   const [editorMode, setEditorMode] = useState<'visual' | 'html'>('visual');
@@ -163,7 +163,7 @@ export default function TemplatesPage() {
 
   const openCreateModal = () => {
     setEditingTemplate(null);
-    setFormData({ name: '', subject: '', body_html: '', visibility: 'public' });
+    setFormData({ name: '', subject: '', body_html: '', visibility: 'shared' });
     setEditorMode('visual');
     setShowModal(true);
   };
@@ -174,7 +174,7 @@ export default function TemplatesPage() {
       name: template.name,
       subject: template.subject,
       body_html: template.body_html,
-      visibility: template.visibility || 'public'
+      visibility: template.visibility || 'shared'
     });
     setEditorMode('visual');
     setShowModal(true);
@@ -227,7 +227,7 @@ export default function TemplatesPage() {
       }
 
       setShowModal(false);
-      setFormData({ name: '', subject: '', body_html: '', visibility: 'public' });
+      setFormData({ name: '', subject: '', body_html: '', visibility: 'shared' });
       setEditingTemplate(null);
       fetchTemplates();
     } catch (err) {
@@ -471,9 +471,9 @@ export default function TemplatesPage() {
                           <input
                             type="radio"
                             name="visibility"
-                            value="public"
-                            checked={formData.visibility === 'public'}
-                            onChange={() => setFormData(prev => ({ ...prev, visibility: 'public' }))}
+                            value="shared"
+                            checked={formData.visibility === 'shared'}
+                            onChange={() => setFormData(prev => ({ ...prev, visibility: 'shared' }))}
                             disabled={submitting}
                             className="text-orange-600 focus:ring-orange-500"
                           />
