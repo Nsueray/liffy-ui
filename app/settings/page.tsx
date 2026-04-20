@@ -8,8 +8,10 @@ interface Sender {
   label: string;
   from_name: string;
   from_email: string;
+  reply_to: string | null;
   is_active: boolean;
   visibility: 'shared' | 'private';
+  campaign_count: number;
 }
 
 export default function SettingsPage() {
@@ -33,6 +35,18 @@ export default function SettingsPage() {
   const [newSenderVisibility, setNewSenderVisibility] = useState<'shared' | 'private'>('shared');
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // Edit Sender
+  const [editingSender, setEditingSender] = useState<Sender | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editReplyTo, setEditReplyTo] = useState('');
+  const [editVisibility, setEditVisibility] = useState<'shared' | 'private'>('shared');
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Delete Sender
+  const [deletingSender, setDeletingSender] = useState<Sender | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // States for ZeroBounce
   const [zbKey, setZbKey] = useState('');
@@ -167,6 +181,75 @@ export default function SettingsPage() {
       setCreateError(err.message);
     } finally {
       setCreateLoading(false);
+    }
+  };
+
+  // --- HANDLERS: EDIT SENDER ---
+  const openEditModal = (s: Sender) => {
+    setEditingSender(s);
+    setEditName(s.from_name);
+    setEditReplyTo(s.reply_to || '');
+    setEditVisibility(s.visibility);
+    setEditError(null);
+  };
+
+  const handleEditSender = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSender) return;
+    setEditLoading(true);
+    setEditError(null);
+    const token = getToken();
+
+    try {
+      const res = await fetch(`${apiBase}/api/senders/${editingSender.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          from_name: editName,
+          reply_to: editReplyTo || null,
+          visibility: editVisibility,
+          label: `${editName} (${editingSender.from_email})`
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update sender");
+
+      setSenders(prev => prev.map(s => s.id === editingSender.id ? { ...s, ...data.sender } : s));
+      setEditingSender(null);
+    } catch (err: any) {
+      setEditError(err.message);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // --- HANDLERS: DELETE SENDER ---
+  const handleDeleteSender = async () => {
+    if (!deletingSender) return;
+    setDeleteLoading(true);
+    const token = getToken();
+
+    try {
+      const res = await fetch(`${apiBase}/api/senders/${deletingSender.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to delete sender");
+      }
+
+      setSenders(prev => prev.filter(s => s.id !== deletingSender.id));
+      setDeletingSender(null);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -369,13 +452,14 @@ export default function SettingsPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Visibility</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Campaigns</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {senders.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">
+                  <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
                     No senders added yet. Please add one to start sending campaigns.
                   </td>
                 </tr>
@@ -391,12 +475,20 @@ export default function SettingsPage() {
                         <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">Public</span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
-                      {s.is_active ? (
-                        <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">Active</span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">Inactive</span>
-                      )}
+                    <td className="px-6 py-4 text-sm text-gray-500">{s.campaign_count || 0}</td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => openEditModal(s)}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium mr-3"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setDeletingSender(s)}
+                        className="text-xs text-red-500 hover:text-red-700 font-medium"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -712,6 +804,130 @@ export default function SettingsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* EDIT SENDER MODAL */}
+      {editingSender && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-lg font-bold mb-4">Edit Sender</h3>
+            {editError && <div className="bg-red-50 text-red-600 p-2 text-sm rounded mb-4">{editError}</div>}
+
+            <form onSubmit={handleEditSender} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">From Email</label>
+                <input
+                  type="email"
+                  disabled
+                  className="w-full border rounded px-3 py-2 bg-gray-50 text-gray-500 cursor-not-allowed"
+                  value={editingSender.from_email}
+                />
+                <p className="text-xs text-gray-400 mt-1">Email cannot be changed (requires SendGrid re-verification).</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">From Name</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full border rounded px-3 py-2"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  placeholder="e.g. John Doe"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Reply-To Email <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  type="email"
+                  className="w-full border rounded px-3 py-2"
+                  value={editReplyTo}
+                  onChange={e => setEditReplyTo(e.target.value)}
+                  placeholder="e.g. replies@company.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Visibility</label>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="edit-visibility"
+                      value="shared"
+                      checked={editVisibility === 'shared'}
+                      onChange={() => setEditVisibility('shared')}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm">Public</span>
+                    <span className="text-xs text-gray-400">(everyone)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="edit-visibility"
+                      value="private"
+                      checked={editVisibility === 'private'}
+                      onChange={() => setEditVisibility('private')}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm">Private</span>
+                    <span className="text-xs text-gray-400">(you + managers)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setEditingSender(null)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {editLoading ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE SENDER CONFIRM MODAL */}
+      {deletingSender && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-bold mb-2">Delete Sender</h3>
+            <p className="text-sm text-gray-600 mb-1">
+              Are you sure you want to delete <strong>{deletingSender.from_name}</strong> ({deletingSender.from_email})?
+            </p>
+            {deletingSender.campaign_count > 0 && (
+              <p className="text-sm text-orange-600 bg-orange-50 px-3 py-2 rounded mt-2">
+                This sender has been used in {deletingSender.campaign_count} campaign{deletingSender.campaign_count > 1 ? 's' : ''}.
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-4 mt-4 border-t">
+              <button
+                onClick={() => setDeletingSender(null)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteSender}
+                disabled={deleteLoading}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteLoading ? "Deleting..." : "Delete"}
+              </button>
+            </div>
           </div>
         </div>
       )}
