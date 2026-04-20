@@ -48,9 +48,15 @@ export default function LoginPage() {
       // Token'ı localStorage'a kaydet
       if (typeof window !== "undefined") {
         localStorage.setItem("liffy_token", token);
-        if (data.user) {
-          localStorage.setItem("liffy_user", JSON.stringify(data.user));
-        }
+        // Store user data for sidebar (role check) — backend returns flat response,
+        // so we construct the user object from response fields + form email
+        const userInfo = {
+          email: data.user?.email || data.email || email,
+          role: data.user?.role || data.role || '',
+          user_id: data.user?.user_id || data.user_id || '',
+          organizer_id: data.user?.organizer_id || data.organizer_id || '',
+        };
+        localStorage.setItem("liffy_user", JSON.stringify(userInfo));
       }
 
       // Başarılı login → Mining Jobs sayfasına yönlendir

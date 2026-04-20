@@ -113,6 +113,7 @@ export default function ActionScreen() {
   const [historyItems, setHistoryItems] = useState<ActionItem[]>([]);
   const [drawerPersonId, setDrawerPersonId] = useState<string | null>(null);
   const [drawerActionId, setDrawerActionId] = useState<string | null>(null);
+  const [emailUsage, setEmailUsage] = useState<{ daily_limit: number; sent_today: number; remaining: number } | null>(null);
 
   const getHeaders = () => {
     const token = typeof window !== "undefined" ? localStorage.getItem("liffy_token") : null;
@@ -128,9 +129,10 @@ export default function ActionScreen() {
       const params = new URLSearchParams({ sort: sortBy });
       if (triggerFilter !== "all") params.set("trigger_reason", triggerFilter);
 
-      const [itemsRes, summaryRes] = await Promise.all([
+      const [itemsRes, summaryRes, usageRes] = await Promise.all([
         fetch(`${API_BASE}/api/actions?${params}`, { headers }),
         fetch(`${API_BASE}/api/actions/summary`, { headers }),
+        fetch(`${API_BASE}/api/campaigns/email-usage`, { headers }),
       ]);
 
       if (itemsRes.ok) {
@@ -140,6 +142,10 @@ export default function ActionScreen() {
       if (summaryRes.ok) {
         const data = await summaryRes.json();
         setSummary(data);
+      }
+      if (usageRes.ok) {
+        const data = await usageRes.json();
+        setEmailUsage(data);
       }
     } catch (err) {
       console.error("Failed to fetch actions:", err);
@@ -372,6 +378,40 @@ export default function ActionScreen() {
 
       {/* Summary bar */}
       {!showHistory && renderSummary()}
+
+      {/* Daily Email Usage */}
+      {!showHistory && emailUsage && emailUsage.daily_limit > 0 && (
+        <div className="mb-6">
+          <Card className={emailUsage.sent_today >= emailUsage.daily_limit ? "border-red-300 bg-red-50" : ""}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">Daily Email Usage</span>
+                </div>
+                <span className={`text-sm font-semibold ${emailUsage.sent_today >= emailUsage.daily_limit ? "text-red-600" : "text-gray-900"}`}>
+                  {emailUsage.sent_today.toLocaleString()} / {emailUsage.daily_limit.toLocaleString()}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    emailUsage.sent_today >= emailUsage.daily_limit
+                      ? "bg-red-500"
+                      : emailUsage.sent_today >= emailUsage.daily_limit * 0.8
+                      ? "bg-yellow-500"
+                      : "bg-green-500"
+                  }`}
+                  style={{ width: `${Math.min(100, (emailUsage.sent_today / emailUsage.daily_limit) * 100)}%` }}
+                />
+              </div>
+              {emailUsage.sent_today >= emailUsage.daily_limit && (
+                <p className="text-xs text-red-600 mt-1">Daily limit reached. New campaigns cannot be started until tomorrow.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Filters & Sort */}
       {!showHistory && (
