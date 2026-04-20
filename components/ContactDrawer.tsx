@@ -109,6 +109,7 @@ export function ContactDrawer({ personId, actionId, onClose, onResolve }: Contac
   const [loading, setLoading] = useState(true);
   const [noteText, setNoteText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [expandedReplies, setExpandedReplies] = useState<Set<number>>(new Set());
 
   const getHeaders = () => {
     const token = typeof window !== "undefined" ? localStorage.getItem("liffy_token") : null;
@@ -333,9 +334,37 @@ export function ContactDrawer({ personId, actionId, onClose, onResolve }: Contac
                         </p>
                       )}
                       {event.activity_type === "reply" && event.meta?.text && (
-                        <p className="text-[11px] text-gray-700 mt-1 ml-5 bg-gray-50 rounded px-2 py-1.5 border-l-2 border-red-300 whitespace-pre-line">
-                          {event.meta.text.length > 200 ? event.meta.text.substring(0, 200) + "..." : event.meta.text}
-                        </p>
+                        <div className="mt-1 ml-5 bg-gray-50 rounded border-l-2 border-red-300 px-2 py-1.5">
+                          {(event.meta.from || event.meta.subject) && (
+                            <div className="mb-1 space-y-0.5">
+                              {event.meta.from && (
+                                <p className="text-[10px] text-gray-400 truncate">From: {event.meta.from}</p>
+                              )}
+                              {event.meta.subject && (
+                                <p className="text-[10px] text-gray-400 truncate">{event.meta.subject}</p>
+                              )}
+                            </div>
+                          )}
+                          <p className="text-[11px] text-gray-700 whitespace-pre-wrap break-words">
+                            {expandedReplies.has(i)
+                              ? event.meta.text
+                              : event.meta.text.length > 200
+                                ? event.meta.text.substring(0, 200) + "..."
+                                : event.meta.text}
+                          </p>
+                          {event.meta.text.length > 200 && (
+                            <button
+                              className="text-[10px] text-orange-500 hover:text-orange-600 mt-1 font-medium"
+                              onClick={() => setExpandedReplies(prev => {
+                                const next = new Set(prev);
+                                next.has(i) ? next.delete(i) : next.add(i);
+                                return next;
+                              })}
+                            >
+                              {expandedReplies.has(i) ? "Show less" : "Show full reply"}
+                            </button>
+                          )}
+                        </div>
                       )}
                       {event.activity_type === "reply" && !event.meta?.text && (
                         <p className="text-[11px] text-gray-400 italic mt-0.5 ml-5">Reply detected — check email for details</p>
