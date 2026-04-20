@@ -126,6 +126,7 @@ type MiningJob = {
   updated_at: string;
   parent_job_id?: string; // For retry tracking
   retry_job_id?: string;  // Reference to the retry job
+  creator_name?: string | null;
 };
 
 type SortField = "created_at" | "name" | "status" | "total_found";
@@ -629,7 +630,8 @@ export default function MiningJobsPage() {
                     Found <SortIcon field="total_found" />
                   </th>
                   <th className="px-4 py-3 text-right">Emails</th>
-                  <th 
+                  <th className="px-4 py-3 text-left">By</th>
+                  <th
                     className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort("created_at")}
                   >
@@ -706,6 +708,9 @@ export default function MiningJobsPage() {
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {job.total_emails_raw}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-gray-500">{job.creator_name || "—"}</span>
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-xs text-gray-500">

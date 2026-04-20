@@ -16,6 +16,7 @@ interface List {
   total_leads: number;
   verified_count: number;
   unverified_count: number;
+  creator_name?: string | null;
 }
 
 interface MiningJob {
@@ -79,7 +80,8 @@ export default function ListsPage() {
         created_at: item.created_at || new Date().toISOString(),
         total_leads: Number(item.total_leads) || 0,
         verified_count: Number(item.verified_count) || 0,
-        unverified_count: Number(item.unverified_count) || 0
+        unverified_count: Number(item.unverified_count) || 0,
+        creator_name: item.creator_name || null
       })));
     } catch (e: any) {
       setError(e.message);
@@ -411,6 +413,7 @@ export default function ListsPage() {
                 <TableHead>Total Leads</TableHead>
                 <TableHead>Verified</TableHead>
                 <TableHead>Unverified</TableHead>
+                <TableHead>By</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -433,6 +436,9 @@ export default function ListsPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{formatNumber(list.unverified_count)}</Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {list.creator_name || "—"}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {formatDate(list.created_at)}

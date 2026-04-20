@@ -31,6 +31,7 @@ interface Campaign {
   started_at?: string | null;
   completed_at?: string | null;
   created_at: string;
+  creator_name?: string | null;
 }
 
 interface CampaignStats {
@@ -309,6 +310,7 @@ export default function CampaignDetailPage() {
               {campaign.status}
             </span>
             {campaign.campaign_type === "sequence" && <span className="px-2 py-0.5 text-xs rounded bg-indigo-100 text-indigo-700 font-semibold">Sequence</span>}
+            {campaign.creator_name && <span className="text-gray-500 text-sm">by {campaign.creator_name}</span>}
             <span className="text-gray-500 text-sm">Created {formatDate(campaign.created_at)}</span>
             {campaign.started_at && (
               <span className="text-gray-500 text-sm">Started {formatDate(campaign.started_at)}</span>

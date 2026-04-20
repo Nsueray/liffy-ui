@@ -13,6 +13,7 @@ interface EmailTemplate {
   created_by_user_id: string | null;
   created_at: string;
   updated_at: string;
+  creator_name?: string | null;
 }
 
 // --- Rich Text Toolbar Component ---
@@ -365,6 +366,9 @@ export default function TemplatesPage() {
                     Visibility
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    By
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Created
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -387,6 +391,9 @@ export default function TemplatesPage() {
                       ) : (
                         <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">Public</span>
                       )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
+                      {template.creator_name || "—"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatDate(template.created_at)}

@@ -17,6 +17,7 @@ interface Campaign {
   scheduled_at?: string | null;
   verification_mode?: string;
   created_at: string;
+  creator_name?: string | null;
 }
 
 interface ResolveStats {
@@ -371,13 +372,14 @@ export default function CampaignsPage() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recipients</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Template</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Scheduled</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">By</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {campaigns.length === 0 ? (
-                <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-500">No campaigns yet.</td></tr>
+                <tr><td colSpan={8} className="px-6 py-8 text-center text-gray-500">No campaigns yet.</td></tr>
             ) : (
                 campaigns.map((c) => (
                     <tr key={c.id} className="hover:bg-gray-50">
@@ -391,6 +393,7 @@ export default function CampaignsPage() {
                       <td className="px-6 py-4 text-sm text-gray-500">{c.recipient_count ?? "-"}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.template_name || c.template_subject || "Unknown"}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.scheduled_at ? formatDate(c.scheduled_at) : "-"}</td>
+                      <td className="px-6 py-4 text-xs text-gray-500">{c.creator_name || "—"}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{formatDate(c.created_at)}</td>
                       <td className="px-6 py-4 text-right text-sm">
                         <div className="flex justify-end gap-2">
