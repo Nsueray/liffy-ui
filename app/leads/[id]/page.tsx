@@ -195,6 +195,11 @@ export default function PersonDetailPage() {
   // Delete
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Unsubscribe
+  const [isUnsubscribed, setIsUnsubscribed] = useState(false);
+  const [unsubConfirm, setUnsubConfirm] = useState(false);
+  const [unsubLoading, setUnsubLoading] = useState(false);
+
   // Notes state
   const [notes, setNotes] = useState<ContactNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
@@ -246,6 +251,20 @@ export default function PersonDetailPage() {
         });
       } else {
         throw new Error('Unexpected response format');
+      }
+      // Check unsubscribe status
+      const personEmail = data.person?.email || data.email;
+      if (personEmail) {
+        try {
+          const unsubRes = await fetch(
+            `${API_BASE}/api/unsubscribes/check?email=${encodeURIComponent(personEmail)}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (unsubRes.ok) {
+            const unsubData = await unsubRes.json();
+            setIsUnsubscribed(!!unsubData.unsubscribed);
+          }
+        } catch { /* ignore */ }
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load person';
@@ -485,6 +504,37 @@ export default function PersonDetailPage() {
     }
   };
 
+  const handleUnsubscribe = async () => {
+    if (!detail) return;
+    const token = getToken();
+    if (!token) return;
+
+    setUnsubLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/unsubscribes`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email: detail.person.email, reason: 'user_request' })
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Unsubscribe failed');
+      }
+
+      setIsUnsubscribed(true);
+      setUnsubConfirm(false);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unsubscribe failed';
+      alert(msg);
+    } finally {
+      setUnsubLoading(false);
+    }
+  };
+
   const formatName = (p: PersonData) => {
     const parts = [p.first_name, p.last_name].filter(Boolean);
     return parts.length > 0 ? parts.join(' ') : null;
@@ -557,6 +607,20 @@ export default function PersonDetailPage() {
           >
             {verifyLoading ? 'Verifying...' : 'Verify Email'}
           </Button>
+          {isUnsubscribed ? (
+            <Button variant="outline" size="sm" disabled className="text-red-500 border-red-200">
+              Unsubscribed
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setUnsubConfirm(true)}
+              className="text-orange-600 border-orange-200 hover:bg-orange-50"
+            >
+              Unsubscribe
+            </Button>
+          )}
           <Button
             variant="destructive"
             size="sm"
@@ -1054,6 +1118,33 @@ export default function PersonDetailPage() {
             )}
           </CardContent>
         </Card>
+      )}
+      {/* Unsubscribe Confirmation Dialog */}
+      {unsubConfirm && detail && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold mb-2">Unsubscribe Contact</h3>
+            <p className="text-sm text-gray-600 mb-1">
+              Unsubscribe <strong>{detail.person.email}</strong>?
+            </p>
+            <p className="text-xs text-gray-500 mb-4">
+              This contact will be excluded from all future campaigns. This action cannot be undone from the UI.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setUnsubConfirm(false)} disabled={unsubLoading}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleUnsubscribe}
+                disabled={unsubLoading}
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                {unsubLoading ? 'Processing...' : 'Confirm Unsubscribe'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
