@@ -60,6 +60,19 @@ interface ZohoPush {
   pushed_at: string;
 }
 
+interface CampaignHistory {
+  id: string;
+  name: string;
+  status: string;
+  created_at: string;
+  sent: number;
+  delivered: number;
+  opens: number;
+  clicks: number;
+  replies: number;
+  bounces: number;
+}
+
 interface PersonDetail {
   person: PersonData;
   affiliations: Affiliation[];
@@ -200,6 +213,9 @@ export default function PersonDetailPage() {
   const [unsubConfirm, setUnsubConfirm] = useState(false);
   const [unsubLoading, setUnsubLoading] = useState(false);
 
+  // Campaign history
+  const [campaignHistory, setCampaignHistory] = useState<CampaignHistory[]>([]);
+
   // Notes state
   const [notes, setNotes] = useState<ContactNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
@@ -266,6 +282,18 @@ export default function PersonDetailPage() {
           }
         } catch { /* ignore */ }
       }
+
+      // Fetch campaign history
+      try {
+        const campRes = await fetch(
+          `${API_BASE}/api/persons/${personId}/campaigns`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (campRes.ok) {
+          const campData = await campRes.json();
+          setCampaignHistory(campData.campaigns || []);
+        }
+      } catch { /* ignore */ }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load person';
       setError(msg);
@@ -802,6 +830,57 @@ export default function PersonDetailPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Campaign History */}
+          <Card>
+            <CardContent className="pt-6">
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">
+                Campaign History ({campaignHistory.length})
+              </h3>
+              {campaignHistory.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No campaigns sent to this contact.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Campaign</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-center">Sent</TableHead>
+                        <TableHead className="text-center">Delivered</TableHead>
+                        <TableHead className="text-center">Opened</TableHead>
+                        <TableHead className="text-center">Clicked</TableHead>
+                        <TableHead className="text-center">Replied</TableHead>
+                        <TableHead className="text-center">Bounced</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {campaignHistory.map(c => (
+                        <TableRow key={c.id} className="cursor-pointer hover:bg-gray-50"
+                          onClick={() => router.push(`/campaigns/${c.id}`)}>
+                          <TableCell className="font-medium text-sm">{c.name || 'Unnamed'}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn(
+                              'text-xs',
+                              c.status === 'completed' && 'bg-green-50 text-green-700',
+                              c.status === 'sending' && 'bg-blue-50 text-blue-700',
+                              c.status === 'failed' && 'bg-red-50 text-red-700',
+                            )}>{c.status}</Badge>
+                          </TableCell>
+                          <TableCell className="text-center">{c.sent > 0 ? '✅' : '—'}</TableCell>
+                          <TableCell className="text-center">{c.delivered > 0 ? '✅' : '—'}</TableCell>
+                          <TableCell className="text-center">{c.opens > 0 ? '✅' : '—'}</TableCell>
+                          <TableCell className="text-center">{c.clicks > 0 ? '✅' : '—'}</TableCell>
+                          <TableCell className="text-center">{c.replies > 0 ? '✅' : '—'}</TableCell>
+                          <TableCell className="text-center">{c.bounces > 0 ? '❌' : '—'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Intent Signals */}
           {detail.intents.length > 0 && (
