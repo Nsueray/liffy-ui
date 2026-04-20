@@ -20,6 +20,7 @@ import {
   Search,
   ExternalLink,
   Loader2,
+  Ban,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.liffy.app";
@@ -110,6 +111,9 @@ export function ContactDrawer({ personId, actionId, onClose, onResolve }: Contac
   const [noteText, setNoteText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [expandedReplies, setExpandedReplies] = useState<Set<number>>(new Set());
+  const [isUnsubscribed, setIsUnsubscribed] = useState(false);
+  const [unsubConfirm, setUnsubConfirm] = useState(false);
+  const [unsubLoading, setUnsubLoading] = useState(false);
 
   const getHeaders = () => {
     const token = typeof window !== "undefined" ? localStorage.getItem("liffy_token") : null;
@@ -131,7 +135,18 @@ export function ContactDrawer({ personId, actionId, onClose, onResolve }: Contac
 
       if (personRes.ok) {
         const data = await personRes.json();
-        setPerson(data.person || data);
+        const p = data.person || data;
+        setPerson(p);
+        // Check unsubscribe status
+        if (p.email) {
+          try {
+            const unsubRes = await fetch(`${API_BASE}/api/unsubscribes/check?email=${encodeURIComponent(p.email)}`, { headers });
+            if (unsubRes.ok) {
+              const unsubData = await unsubRes.json();
+              setIsUnsubscribed(unsubData.unsubscribed);
+            }
+          } catch { /* ignore */ }
+        }
       } else {
         console.warn("[ContactDrawer] Person fetch failed:", personRes.status);
       }
@@ -201,6 +216,27 @@ export function ContactDrawer({ personId, actionId, onClose, onResolve }: Contac
       }
     } catch (err) {
       console.error("Failed to log call:", err);
+    }
+  };
+
+  const handleUnsubscribe = async () => {
+    if (!person?.email) return;
+    setUnsubLoading(true);
+    const headers = getHeaders();
+    try {
+      const res = await fetch(`${API_BASE}/api/unsubscribes`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ email: person.email, reason: "user_request" }),
+      });
+      if (res.ok) {
+        setIsUnsubscribed(true);
+        setUnsubConfirm(false);
+      }
+    } catch (err) {
+      console.error("Failed to unsubscribe:", err);
+    } finally {
+      setUnsubLoading(false);
     }
   };
 
@@ -428,16 +464,22 @@ export function ContactDrawer({ personId, actionId, onClose, onResolve }: Contac
               <Phone className="h-3.5 w-3.5 mr-1" />
               Call Log
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-gray-400 ml-auto"
-              title="Coming soon — use email client for now"
-              disabled
-            >
-              <Mail className="h-3.5 w-3.5 mr-1" />
-              Reply
-            </Button>
+            {isUnsubscribed ? (
+              <Button size="sm" variant="ghost" className="text-gray-400 ml-auto" disabled>
+                <Ban className="h-3.5 w-3.5 mr-1" />
+                Unsubscribed
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-red-400 hover:text-red-600 hover:bg-red-50 ml-auto"
+                onClick={() => setUnsubConfirm(true)}
+              >
+                <Ban className="h-3.5 w-3.5 mr-1" />
+                Unsubscribe
+              </Button>
+            )}
             <a href={`/leads/${personId}`} target="_blank" rel="noopener noreferrer">
               <Button size="sm" variant="ghost">
                 <ExternalLink className="h-3.5 w-3.5 mr-1" />
@@ -471,6 +513,27 @@ export function ContactDrawer({ personId, actionId, onClose, onResolve }: Contac
           </div>
         </div>
       </div>
+
+      {/* Unsubscribe confirmation */}
+      {unsubConfirm && (
+        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center" onClick={() => setUnsubConfirm(false)}>
+          <div className="bg-white rounded-lg p-5 w-80 shadow-xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold mb-2">Unsubscribe {person?.email}?</h3>
+            <p className="text-xs text-gray-500 mb-4">This person will be excluded from all future campaigns.</p>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="outline" onClick={() => setUnsubConfirm(false)}>Cancel</Button>
+              <Button
+                size="sm"
+                className="bg-red-600 hover:bg-red-700 text-white"
+                disabled={unsubLoading}
+                onClick={handleUnsubscribe}
+              >
+                {unsubLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Unsubscribe"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
