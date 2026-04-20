@@ -138,6 +138,7 @@ export function ContactDrawer({ personId, actionId, onClose, onResolve }: Contac
       if (timelineRes.ok) {
         const data = await timelineRes.json();
         setTimeline(data.timeline || []);
+        setExpandedReplies(new Set());
       } else {
         console.warn("[ContactDrawer] Timeline fetch failed:", timelineRes.status);
       }
@@ -175,6 +176,7 @@ export function ContactDrawer({ personId, actionId, onClose, onResolve }: Contac
         if (tlRes.ok) {
           const data = await tlRes.json();
           setTimeline(data.timeline || []);
+          setExpandedReplies(new Set());
         }
       }
     } catch (err) {
