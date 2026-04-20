@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/tooltip";
 import {
   LayoutDashboard,
-  Database,
   Users,
   List,
   Target,
@@ -32,11 +31,11 @@ import {
   Activity,
   ShieldCheck,
   BarChart3,
-  Search,
   CheckSquare,
   Kanban,
   Shield,
   Zap,
+  Pickaxe,
 } from "lucide-react";
 import { logoutClient } from "@/lib/auth";
 
@@ -56,17 +55,11 @@ const menuItems = [
     description: "Overview and analytics"
   },
   {
-    name: "Mining Jobs",
-    href: "/mining/jobs",
-    icon: Database,
-    description: "Data extraction jobs",
-    badge: { type: "info", count: 0 } // Will be updated dynamically
-  },
-  {
-    name: "Source Discovery",
-    href: "/source-discovery",
-    icon: Search,
-    description: "AI-powered source finder"
+    name: "Lead Mining",
+    href: "/mining",
+    icon: Pickaxe,
+    description: "Discover sources & run mining jobs",
+    badge: { type: "info", count: 0 }
   },
   {
     name: "Contacts",
@@ -286,7 +279,7 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
     if (item.name === "Action" && counts.actionOpen > 0) {
       return { ...item, badge: { type: "warning", count: counts.actionOpen } };
     }
-    if (item.name === "Mining Jobs" && counts.runningJobs > 0) {
+    if (item.name === "Lead Mining" && counts.runningJobs > 0) {
       return { ...item, badge: { type: "info", count: counts.runningJobs } };
     }
     if (item.name === "Contacts" && counts.newLeads > 0) {
