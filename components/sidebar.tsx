@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   LayoutDashboard,
+  Building2,
   Users,
   List,
   Target,
@@ -68,7 +69,13 @@ const menuItems = [
     description: "Manage contacts",
     badge: { type: "success", count: 0 }
   },
-  { 
+  {
+    name: "Companies",
+    href: "/companies",
+    icon: Building2,
+    description: "Company directory"
+  },
+  {
     name: "Lists", 
     href: "/lists", 
     icon: List,
