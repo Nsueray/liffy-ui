@@ -431,7 +431,7 @@ export function Sidebar({ defaultCollapsed = false }: SidebarProps) {
           {bottomMenuItems.filter((item) => {
             if ((item as any).adminOnly) {
               const role = currentUser?.role;
-              return role === 'owner' || role === 'admin';
+              return role === 'owner' || role === 'admin' || role === 'manager';
             }
             return true;
           }).map((item) => {

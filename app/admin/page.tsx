@@ -115,7 +115,7 @@ export default function AdminPage() {
         const userId = u.user_id || u.id || '';
         setCurrentRole(role);
         setCurrentUserId(userId);
-        if (role !== 'owner' && role !== 'admin') {
+        if (role !== 'owner' && role !== 'admin' && role !== 'manager') {
           router.replace('/dashboard');
         }
       }
@@ -272,7 +272,7 @@ export default function AdminPage() {
     }
   };
 
-  if (currentRole !== 'owner' && currentRole !== 'admin') {
+  if (currentRole !== 'owner' && currentRole !== 'admin' && currentRole !== 'manager') {
     return null; // redirect happening
   }
 
@@ -410,7 +410,7 @@ export default function AdminPage() {
                     className="w-full border rounded px-3 py-2 text-sm">
                     <option value="sales_rep">Sales Rep</option>
                     <option value="manager">Manager</option>
-                    <option value="staff">Staff</option>
+                    <option value="admin">Admin</option>
                     {currentRole === 'owner' && <option value="owner">Owner</option>}
                   </select>
                 </div>
@@ -476,9 +476,7 @@ export default function AdminPage() {
                   >
                     <option value="sales_rep">Sales Rep</option>
                     <option value="manager">Manager</option>
-                    <option value="staff">Staff</option>
-                    <option value="user">User (legacy)</option>
-                    <option value="admin">Admin (legacy)</option>
+                    <option value="admin">Admin</option>
                     {currentRole === 'owner' && <option value="owner">Owner</option>}
                   </select>
                   {showEdit.id === currentUserId && showEdit.role === 'owner' && (
