@@ -438,9 +438,24 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
   const [sources, setSources] = useState<Source[]>([]);
   const [searchedAt, setSearchedAt] = useState<string | null>(null);
 
+  // Rate limit state
+  const [rateLimitCountdown, setRateLimitCountdown] = useState(0);
+
   // Selection state
   const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
   const [batchLoading, setBatchLoading] = useState(false);
+
+  // Rate limit countdown timer
+  useEffect(() => {
+    if (rateLimitCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setRateLimitCountdown((prev) => {
+        if (prev <= 1) { clearInterval(timer); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [rateLimitCountdown]);
 
   const isCustomUrl = selectedSourceType === "custom_url";
   const isCustomSearch = selectedSourceType === "custom_search";
@@ -546,6 +561,15 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
       }
 
       const data = await res.json();
+
+      // Rate limit handling
+      if (data.error === "rate_limit") {
+        const wait = data.retry_after || 60;
+        setRateLimitCountdown(wait);
+        toast.error(`AI search rate limited. Please wait ${wait}s and try again.`);
+        return;
+      }
+
       setSources(data.sources || []);
       setSearchedAt(data.searched_at || new Date().toISOString());
 
@@ -796,7 +820,7 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
               {/* Search button */}
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || rateLimitCountdown > 0}
                 className="inline-flex items-center gap-2 px-5 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium rounded-md transition-colors text-sm h-[38px]"
               >
                 {loading ? (
@@ -804,7 +828,7 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
                 ) : (
                   <Search className="w-4 h-4" />
                 )}
-                {loading ? "Searching..." : "Discover"}
+                {loading ? "Searching..." : rateLimitCountdown > 0 ? `Wait ${rateLimitCountdown}s` : "Discover"}
               </button>
             </div>
           )}
@@ -826,6 +850,14 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
 
           {loading && (
             <p className="text-xs text-gray-400 mt-2">This may take up to 60 seconds (AI web search)</p>
+          )}
+          {rateLimitCountdown > 0 && (
+            <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-md">
+              <AlertTriangle className="w-4 h-4 text-yellow-600 flex-shrink-0" />
+              <span className="text-sm text-yellow-700">
+                Rate limited. Please wait <span className="font-semibold">{rateLimitCountdown}s</span> before searching again.
+              </span>
+            </div>
           )}
         </form>
       )}
