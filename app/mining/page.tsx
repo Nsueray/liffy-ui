@@ -44,6 +44,7 @@ import {
   Factory,
   Link2,
   ScrollText,
+  History,
 } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════════════════
@@ -57,6 +58,20 @@ interface Source {
   has_email_on_page: boolean | "unknown";
   language: string;
   notes: string;
+  mining_status?: string | null;
+  mining_found?: number;
+  mining_job_id?: string;
+}
+
+interface DiscoverySearch {
+  id: string;
+  source_type: string;
+  keyword: string | null;
+  industry: string | null;
+  countries: string[] | null;
+  result_count: number;
+  results: Source[];
+  created_at: string;
 }
 
 // Discovery v2: Source type definitions
@@ -423,7 +438,7 @@ function RetryJobButton({
 // TAB 1: DISCOVER
 // ═══════════════════════════════════════════════════════════════════
 
-function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
+function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => void; onViewHistory: () => void }) {
   // Source type selection
   const [selectedSourceType, setSelectedSourceType] = useState<DiscoverySourceType | null>(null);
 
@@ -954,6 +969,16 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
         </div>
       )}
 
+      {/* ── Saved link ── */}
+      {searchedAt && sources.length > 0 && (
+        <p className="text-xs text-gray-400 mt-2">
+          This search has been saved.{" "}
+          <button type="button" onClick={onViewHistory} className="text-orange-500 hover:text-orange-600 underline">
+            View in Search History &rarr;
+          </button>
+        </p>
+      )}
+
       {/* ── Bottom bar: Mine Selected ── */}
       {sources.length > 0 && selectedUrls.size > 0 && (
         <div className="sticky bottom-0 mt-3 bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-center justify-between shadow-lg">
@@ -982,6 +1007,288 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
           <p className="text-sm font-medium">Select a source type above to start discovering</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TAB 2: SEARCH HISTORY
+// ═══════════════════════════════════════════════════════════════════
+
+function SearchHistoryTab({ onMineCreated }: { onMineCreated: () => void }) {
+  const [searches, setSearches] = useState<DiscoverySearch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
+  const [batchLoading, setBatchLoading] = useState(false);
+
+  const fetchHistory = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/source-discovery/history", { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch history");
+      const data = await res.json();
+      setSearches(data.searches || []);
+    } catch {
+      toast.error("Failed to load search history");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  const toggleExpand = (id: string) => {
+    setExpandedId((prev) => prev === id ? null : id);
+    setSelectedUrls(new Set());
+  };
+
+  const toggleSource = (url: string) => {
+    setSelectedUrls((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+  };
+
+  const handleMine = async (source: Source) => {
+    try {
+      const res = await fetch("/api/mining/jobs", {
+        method: "POST",
+        headers: { ...(getAuthHeaders() ?? {}), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "url",
+          input: source.url,
+          name: `Discovery — ${source.source_type}: ${(() => { try { return new URL(source.url).hostname; } catch { return source.url; } })()}`,
+          strategy: "auto",
+          config: { mining_mode: "full" },
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create mining job");
+      }
+      toast.success("Mining job created!");
+      onMineCreated();
+      fetchHistory(); // refresh mining status
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to create mining job");
+    }
+  };
+
+  const handleMineSelected = async () => {
+    if (selectedUrls.size === 0) return;
+    setBatchLoading(true);
+    try {
+      const urls = Array.from(selectedUrls).map((url) => ({ url }));
+      const res = await fetch("/api/mining/batch-create", {
+        method: "POST",
+        headers: { ...(getAuthHeaders() ?? {}), "Content-Type": "application/json" },
+        body: JSON.stringify({ urls }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create mining jobs");
+      }
+      const data = await res.json();
+      toast.success(`${data.created} mining jobs created!`);
+      if (data.failed > 0) toast.error(`${data.failed} URLs failed`);
+      setSelectedUrls(new Set());
+      onMineCreated();
+      fetchHistory();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to create mining jobs");
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
+  // Source type label for search cards
+  const sourceTypeLabel = (type: string) => {
+    const map: Record<string, string> = {
+      trade_fair: "Trade Fair", association: "Association", chamber: "Chamber",
+      business_directory: "Directory", company_listing: "Catalog", trade_portal: "Trade Portal",
+      government_trade: "Gov DB", custom_search: "Custom", custom_url: "URL",
+    };
+    return map[type] || type;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  if (searches.length === 0) {
+    return (
+      <div className="text-center py-16 text-gray-400">
+        <History className="w-10 h-10 mx-auto mb-2 opacity-50" />
+        <p className="text-sm font-medium">No searches yet</p>
+        <p className="text-xs mt-1">Start discovering sources in the Discover tab.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {searches.map((s) => {
+        const isExpanded = expandedId === s.id;
+        // Build search description
+        const descParts = [s.keyword, s.industry, ...(s.countries || [])].filter(Boolean);
+        const description = descParts.join(" | ") || "No filters";
+        const unminedCount = s.results.filter((r) => !r.mining_status).length;
+
+        return (
+          <div key={s.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            {/* Search card header */}
+            <button
+              type="button"
+              onClick={() => toggleExpand(s.id)}
+              className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left"
+            >
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-orange-100 text-orange-700 flex-shrink-0">
+                {sourceTypeLabel(s.source_type)}
+              </span>
+              <span className="text-sm text-gray-700 font-medium truncate flex-1">{description}</span>
+              <span className="text-xs text-gray-500 flex-shrink-0">
+                {s.result_count} source{s.result_count !== 1 ? "s" : ""}
+              </span>
+              {unminedCount > 0 && unminedCount < s.result_count && (
+                <span className="text-[10px] text-yellow-600 bg-yellow-50 border border-yellow-200 rounded px-1.5 py-0.5 flex-shrink-0">
+                  {unminedCount} unmined
+                </span>
+              )}
+              <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:inline">
+                {new Date(s.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}{" "}
+                {new Date(s.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+              {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+            </button>
+
+            {/* Expanded results */}
+            {isExpanded && (
+              <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/50">
+                {s.results.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-2">No results in this search.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {s.results.map((source, idx) => {
+                      const typeConfig = SOURCE_TYPE_CONFIG[source.source_type] || SOURCE_TYPE_CONFIG.other;
+                      const TypeIcon = typeConfig.icon;
+                      let hostname = "";
+                      try { hostname = new URL(source.url).hostname; } catch { hostname = source.url; }
+                      const isMined = !!source.mining_status;
+                      const isSelected = selectedUrls.has(source.url);
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`bg-white border rounded-lg px-3 py-2 transition-all ${
+                            isMined ? "border-gray-200 opacity-80" : isSelected ? "border-orange-400 bg-orange-50/30 cursor-pointer" : "border-gray-200 hover:border-gray-300 cursor-pointer"
+                          }`}
+                          onClick={() => !isMined && toggleSource(source.url)}
+                        >
+                          <div className="flex items-center gap-3">
+                            {/* Checkbox — only for unmined */}
+                            {!isMined ? (
+                              <div className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                                isSelected ? "bg-orange-500 border-orange-500" : "border-gray-300 bg-white"
+                              }`}>
+                                {isSelected && <CheckCircle className="w-3 h-3 text-white" />}
+                              </div>
+                            ) : (
+                              <div className="flex-shrink-0 w-4 h-4" />
+                            )}
+
+                            {/* Type badge */}
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium flex-shrink-0 ${typeConfig.color}`}>
+                              <TypeIcon className="w-3 h-3" />
+                              {typeConfig.label}
+                            </span>
+
+                            {/* URL + notes */}
+                            <div className="flex-1 min-w-0">
+                              <a
+                                href={source.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-sm font-medium text-blue-600 hover:underline inline-flex items-center gap-1"
+                              >
+                                {hostname}
+                                <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                              </a>
+                              {source.notes && (
+                                <span className="text-xs text-gray-400 ml-2 hidden sm:inline">{source.notes.slice(0, 80)}{source.notes.length > 80 ? "..." : ""}</span>
+                              )}
+                            </div>
+
+                            {/* Mining status or Mine button */}
+                            <div className="flex items-center gap-2 flex-shrink-0 text-xs">
+                              <span className="text-gray-600 font-medium" title="Estimated companies">
+                                {source.estimated_companies || "?"} co.
+                              </span>
+                              {source.mining_status === "completed" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 border border-green-200 text-green-700 text-xs font-medium">
+                                  <CheckCircle className="w-3 h-3" />
+                                  Mined &mdash; {source.mining_found ?? 0} found
+                                </span>
+                              ) : source.mining_status === "running" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-medium">
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  Mining...
+                                </span>
+                              ) : source.mining_status === "failed" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
+                                  <XCircle className="w-3 h-3" />
+                                  Failed
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleMine(source); }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded transition-colors"
+                                >
+                                  <Pickaxe className="w-3 h-3" />
+                                  Mine
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Batch mine bar for this search */}
+                {selectedUrls.size > 0 && (
+                  <div className="mt-3 flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-2">
+                    <span className="text-sm text-gray-600">
+                      <span className="font-semibold text-orange-600">{selectedUrls.size}</span> selected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleMineSelected}
+                      disabled={batchLoading}
+                      className="inline-flex items-center gap-2 px-4 py-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white font-medium rounded-md transition-colors text-sm"
+                    >
+                      {batchLoading ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</>
+                      ) : (
+                        <><Pickaxe className="w-4 h-4" /> Mine Selected ({selectedUrls.size})</>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1711,20 +2018,28 @@ function LeadMiningContent() {
 
   const searchParams = useSearchParams();
   const router = useRouter();
-  const initialTab = searchParams.get("tab") === "discover" ? "discover" : "jobs";
-  const [activeTab, setActiveTab] = useState<"discover" | "jobs">(initialTab);
+  type TabType = "discover" | "history" | "jobs";
+  const tabParam = searchParams.get("tab");
+  const initialTab: TabType = tabParam === "discover" ? "discover" : tabParam === "history" ? "history" : "jobs";
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [jobsRefreshKey, setJobsRefreshKey] = useState(0);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
-  const switchTab = (tab: "discover" | "jobs") => {
+  const switchTab = (tab: TabType) => {
     setActiveTab(tab);
-    const url = tab === "discover" ? "/mining?tab=discover" : "/mining?tab=jobs";
-    router.replace(url, { scroll: false });
+    router.replace(`/mining?tab=${tab}`, { scroll: false });
   };
 
   const handleMineCreated = () => {
     setJobsRefreshKey((k) => k + 1);
+    setHistoryRefreshKey((k) => k + 1);
     switchTab("jobs");
     toast.success("Switched to Jobs tab");
+  };
+
+  const handleViewHistory = () => {
+    setHistoryRefreshKey((k) => k + 1);
+    switchTab("history");
   };
 
   return (
@@ -1757,6 +2072,17 @@ function LeadMiningContent() {
             Discover
           </button>
           <button
+            onClick={() => switchTab("history")}
+            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "history"
+                ? "border-orange-500 text-orange-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            <History className="h-4 w-4 inline mr-2" />
+            Search History
+          </button>
+          <button
             onClick={() => switchTab("jobs")}
             className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
               activeTab === "jobs"
@@ -1773,7 +2099,9 @@ function LeadMiningContent() {
       {/* Tab Content */}
       <div className="flex-1">
         {activeTab === "discover" ? (
-          <DiscoverTab onMineCreated={handleMineCreated} />
+          <DiscoverTab onMineCreated={handleMineCreated} onViewHistory={handleViewHistory} />
+        ) : activeTab === "history" ? (
+          <SearchHistoryTab key={historyRefreshKey} onMineCreated={handleMineCreated} />
         ) : (
           <JobsTab refreshKey={jobsRefreshKey} />
         )}
