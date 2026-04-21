@@ -20,6 +20,12 @@ type MiningJob = {
   processed_pages: number | null;
   total_pages: number | null;
   error?: string | null;
+  stats?: {
+    single_domain_warning?: boolean;
+    dominant_domain?: string;
+    domain_percentage?: number;
+    [key: string]: unknown;
+  } | null;
   created_at: string;
   started_at?: string | null;
   completed_at?: string | null;
@@ -185,6 +191,36 @@ export default function MiningJobDetailPage() {
         <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
           <p className="font-medium">This site could not be mined via cloud mining.</p>
           <p className="mt-1">The site is likely blocking cloud servers (Cloudflare, CAPTCHA, or IP restriction). It needs to be mined using the local miner from your computer. Check your email for the mining command.</p>
+        </div>
+      )}
+
+      {/* Zero results banner */}
+      {job?.status === "completed" && (job?.total_found ?? 0) === 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <p className="font-semibold">No contacts found on this page.</p>
+          <p className="mt-2">Possible reasons:</p>
+          <ul className="mt-1 list-disc list-inside space-y-1 text-red-700">
+            <li>This site may use JavaScript rendering (SPA) which requires the Local Miner tool</li>
+            <li>The page may require login or registration to access data</li>
+            <li>The site may be blocking automated access (Cloudflare, CAPTCHA)</li>
+            <li>The page structure is not supported by the current mining engine</li>
+          </ul>
+        </div>
+      )}
+
+      {/* Low results banner */}
+      {job?.status === "completed" && (job?.total_found ?? 0) > 0 && (job?.total_found ?? 0) <= 3 && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+          <p className="font-semibold">Very few contacts found ({job.total_found}).</p>
+          <p className="mt-1">The site structure may not be fully supported. Consider trying with the Local Miner or checking if the page has a different URL for the full listing.</p>
+        </div>
+      )}
+
+      {/* Single domain warning banner */}
+      {job?.status === "completed" && job?.stats?.single_domain_warning && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+          <p className="font-semibold">&#9888; {job.stats.domain_percentage}% of results are from {job.stats.dominant_domain}</p>
+          <p className="mt-1">These may be staff contacts from the organization itself, not member companies. Review carefully before importing.</p>
         </div>
       )}
 

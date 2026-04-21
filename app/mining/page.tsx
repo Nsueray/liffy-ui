@@ -1921,7 +1921,25 @@ function JobsTab({ refreshKey }: { refreshKey: number }) {
                         <span className="text-xs text-gray-400">&mdash;</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{job.total_found}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {job.status === "completed" && job.total_found === 0 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700">No results</span>
+                        )}
+                        {job.status === "completed" && job.total_found > 0 && job.total_found <= 3 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-100 text-yellow-700">Low</span>
+                        )}
+                        {job.status === "completed" && job.total_found > 50 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">Good</span>
+                        )}
+                        {job.stats?.single_domain_warning && (
+                          <span title={`${job.stats.domain_percentage}% from ${job.stats.dominant_domain}`}>
+                            <AlertTriangle className="w-3.5 h-3.5 text-yellow-500" />
+                          </span>
+                        )}
+                        <span>{job.total_found}</span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-right tabular-nums">{job.total_emails_raw}</td>
                     <td className="px-4 py-3">
                       <span className="text-xs text-gray-500">{job.creator_name || "&mdash;"}</span>

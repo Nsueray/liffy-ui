@@ -63,6 +63,12 @@ type JobSummary = {
   total_emails_raw: number;
   total_prospects_created: number;
   completed_at?: string;
+  stats?: {
+    single_domain_warning?: boolean;
+    dominant_domain?: string;
+    domain_percentage?: number;
+    [key: string]: unknown;
+  } | null;
 };
 
 type Summary = {
@@ -986,6 +992,13 @@ export default function MiningJobResultsPage() {
               {job?.name || `Job ${jobId}`} • {totalFromServer} results found
             </p>
           </div>
+          {/* Single domain warning inline badge */}
+          {job?.stats?.single_domain_warning && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium border border-yellow-200">
+              <AlertTriangle className="h-3 w-3" />
+              {job.stats.domain_percentage}% from {job.stats.dominant_domain}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -1061,6 +1074,17 @@ export default function MiningJobResultsPage() {
           </button>
         </div>
       </div>
+
+      {/* Single domain warning banner */}
+      {job?.stats?.single_domain_warning && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">{job.stats.domain_percentage}% of results are from {job.stats.dominant_domain}</p>
+            <p className="mt-0.5">These may be staff contacts from the organization itself, not member companies. Review carefully before importing.</p>
+          </div>
+        </div>
+      )}
 
       {/* Import Progress Bar */}
       {importStatus === "processing" && importProgress && (
