@@ -41,6 +41,9 @@ import {
   FileType,
   Plus,
   X,
+  Factory,
+  Link2,
+  ScrollText,
 } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════════════════
@@ -55,6 +58,52 @@ interface Source {
   language: string;
   notes: string;
 }
+
+// Discovery v2: Source type definitions
+type DiscoverySourceType =
+  | "trade_fair"
+  | "association"
+  | "chamber"
+  | "business_directory"
+  | "company_listing"
+  | "trade_portal"
+  | "government_trade"
+  | "custom_url"
+  | "custom_search";
+
+interface SourceTypeCard {
+  id: DiscoverySourceType;
+  label: string;
+  description: string;
+  icon: React.ElementType;
+  placeholder: string;
+}
+
+const DISCOVERY_SOURCE_TYPES: SourceTypeCard[] = [
+  { id: "trade_fair", label: "Trade Fair", description: "Exhibitor directories", icon: Factory, placeholder: "e.g. Mega Clima Ghana 2025" },
+  { id: "association", label: "Association", description: "Member directories", icon: Building2, placeholder: "e.g. HVAC manufacturers association" },
+  { id: "chamber", label: "Chamber", description: "Commerce members", icon: Landmark, placeholder: "e.g. Istanbul chamber of commerce" },
+  { id: "business_directory", label: "Directory", description: "Business listings", icon: BookOpen, placeholder: "e.g. packaging suppliers Germany" },
+  { id: "company_listing", label: "Catalog", description: "Company pages", icon: ScrollText, placeholder: "e.g. textile manufacturers catalog" },
+  { id: "trade_portal", label: "Trade Portal", description: "Supplier databases", icon: Globe, placeholder: "e.g. food exporters Turkey" },
+  { id: "government_trade", label: "Gov Database", description: "Trade ministries", icon: Landmark, placeholder: "e.g. TOBB exporter list" },
+  { id: "custom_url", label: "Custom URL", description: "Paste any URL", icon: Link2, placeholder: "https://example.com/members" },
+  { id: "custom_search", label: "Custom Search", description: "Free keyword search", icon: Search, placeholder: "Type any search query..." },
+];
+
+const INDUSTRY_OPTIONS = [
+  "HVAC", "Food & Beverage", "Construction", "Packaging", "Textiles",
+  "Automotive", "Energy", "Electronics", "Healthcare", "Chemicals",
+  "Mining", "Agriculture", "Furniture", "Plastics", "Machinery",
+  "Logistics", "IT & Software", "Defense", "Tourism", "Other",
+];
+
+const COUNTRY_OPTIONS = [
+  "Turkey", "Germany", "France", "Italy", "Nigeria", "Ghana", "Morocco",
+  "USA", "UK", "China", "India", "UAE", "Spain", "Netherlands", "Belgium",
+  "Poland", "Russia", "Brazil", "Mexico", "Egypt", "Saudi Arabia",
+  "South Africa", "Japan", "South Korea", "Indonesia", "Iran",
+];
 
 type MiningJobStatus = "pending" | "running" | "completed" | "failed" | "needs_manual";
 
@@ -328,48 +377,115 @@ function RetryJobButton({
 // ═══════════════════════════════════════════════════════════════════
 
 function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
-  const [fairName, setFairName] = useState("");
+  // Source type selection
+  const [selectedSourceType, setSelectedSourceType] = useState<DiscoverySourceType | null>(null);
+
+  // Search filters
+  const [keyword, setKeyword] = useState("");
   const [industry, setIndustry] = useState("");
-  const [targetCountries, setTargetCountries] = useState("");
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
+  const [customUrl, setCustomUrl] = useState("");
+
+  // Results state
   const [loading, setLoading] = useState(false);
   const [sources, setSources] = useState<Source[]>([]);
   const [searchedAt, setSearchedAt] = useState<string | null>(null);
 
+  // Selection state
+  const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
+  const [batchLoading, setBatchLoading] = useState(false);
+
+  const isCustomUrl = selectedSourceType === "custom_url";
+  const isCustomSearch = selectedSourceType === "custom_search";
+  const currentTypeCard = DISCOVERY_SOURCE_TYPES.find((t) => t.id === selectedSourceType);
+
+  // Toggle country selection
+  const toggleCountry = (country: string) => {
+    setSelectedCountries((prev) =>
+      prev.includes(country) ? prev.filter((c) => c !== country) : [...prev, country]
+    );
+  };
+
+  // Toggle source selection
+  const toggleSource = (url: string) => {
+    setSelectedUrls((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedUrls(new Set(sources.map((s) => s.url)));
+  };
+
+  const deselectAll = () => {
+    setSelectedUrls(new Set());
+  };
+
+  // ── Search handler ──
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!fairName.trim()) {
-      toast.error("Please enter a fair name");
+    if (!selectedSourceType) {
+      toast.error("Please select a source type first");
       return;
     }
-    if (!industry.trim()) {
-      toast.error("Please enter an industry");
+
+    if (isCustomUrl) {
+      // Custom URL: directly create a mining job
+      if (!customUrl.trim()) {
+        toast.error("Please enter a URL");
+        return;
+      }
+      try {
+        const res = await fetch("/api/mining/jobs", {
+          method: "POST",
+          headers: { ...(getAuthHeaders() ?? {}), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "url",
+            input: customUrl.trim(),
+            name: `Custom URL — ${(() => { try { return new URL(customUrl.trim()).hostname; } catch { return customUrl.trim().slice(0, 40); } })()}`,
+            strategy: "auto",
+            config: { mining_mode: "full" },
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || "Failed to create mining job");
+        }
+        toast.success("Mining job created!");
+        setCustomUrl("");
+        onMineCreated();
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "Failed to create mining job");
+      }
+      return;
+    }
+
+    if (!keyword.trim()) {
+      toast.error("Please enter a search keyword");
       return;
     }
 
     setLoading(true);
     setSources([]);
     setSearchedAt(null);
+    setSelectedUrls(new Set());
 
     try {
-      const countries = targetCountries
-        .split(",")
-        .map((c) => c.trim())
-        .filter(Boolean);
-
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 90000);
 
       const res = await fetch("/api/source-discovery", {
         method: "POST",
-        headers: {
-          ...(getAuthHeaders() ?? {}),
-          "Content-Type": "application/json",
-        },
+        headers: { ...(getAuthHeaders() ?? {}), "Content-Type": "application/json" },
         body: JSON.stringify({
-          fair_name: fairName.trim(),
-          industry: industry.trim(),
-          target_countries: countries,
+          keyword: keyword.trim(),
+          industry: industry || undefined,
+          target_countries: selectedCountries,
+          source_type: selectedSourceType,
         }),
         signal: controller.signal,
       });
@@ -388,7 +504,7 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
       if (data.sources?.length > 0) {
         toast.success(`Found ${data.sources.length} sources`);
       } else {
-        toast("No sources found. Try different search terms.", { icon: "?" });
+        toast("No sources found. Try different search terms.", { icon: "🔍" });
       }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") {
@@ -401,32 +517,60 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
     }
   };
 
+  // ── Mine single source ──
   const handleMine = async (source: Source) => {
     try {
       const res = await fetch("/api/mining/jobs", {
         method: "POST",
-        headers: {
-          ...(getAuthHeaders() ?? {}),
-          "Content-Type": "application/json",
-        },
+        headers: { ...(getAuthHeaders() ?? {}), "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "url",
           input: source.url,
-          name: `Source Discovery — ${source.source_type}: ${new URL(source.url).hostname}`,
+          name: `Discovery — ${source.source_type}: ${(() => { try { return new URL(source.url).hostname; } catch { return source.url; } })()}`,
           strategy: "auto",
           config: { mining_mode: "full" },
         }),
       });
-
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to create mining job");
       }
-
-      toast.success(`Mining job created for ${new URL(source.url).hostname}`);
+      toast.success(`Mining job created for ${(() => { try { return new URL(source.url).hostname; } catch { return source.url; } })()}`);
       onMineCreated();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to create mining job");
+    }
+  };
+
+  // ── Mine selected (batch) ──
+  const handleMineSelected = async () => {
+    if (selectedUrls.size === 0) return;
+
+    setBatchLoading(true);
+    try {
+      const urls = Array.from(selectedUrls).map((url) => ({ url }));
+      const res = await fetch("/api/mining/batch-create", {
+        method: "POST",
+        headers: { ...(getAuthHeaders() ?? {}), "Content-Type": "application/json" },
+        body: JSON.stringify({ urls }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create mining jobs");
+      }
+
+      const data = await res.json();
+      toast.success(`${data.created} mining jobs created!`);
+      if (data.failed > 0) {
+        toast.error(`${data.failed} URLs failed`);
+      }
+      setSelectedUrls(new Set());
+      onMineCreated();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to create mining jobs");
+    } finally {
+      setBatchLoading(false);
     }
   };
 
@@ -438,87 +582,194 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
 
   return (
     <div>
-      {/* Search Form */}
-      <form onSubmit={handleSearch} className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Fair Name
-            </label>
-            <input
-              type="text"
-              value={fairName}
-              onChange={(e) => setFairName(e.target.value)}
-              placeholder="e.g. Yapi Fuari Istanbul 2025"
-              maxLength={200}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            />
-          </div>
+      {/* ── STEP 1: Source Type Selection ── */}
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">What do you want to discover?</h2>
+        <p className="text-sm text-gray-500 mb-4">Select a source type, then add filters to find mineable data sources</p>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Industry
-            </label>
-            <input
-              type="text"
-              value={industry}
-              onChange={(e) => setIndustry(e.target.value)}
-              placeholder="e.g. construction materials, glass, ceramics"
-              maxLength={200}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Target Countries
-            </label>
-            <input
-              type="text"
-              value={targetCountries}
-              onChange={(e) => setTargetCountries(e.target.value)}
-              placeholder="e.g. Turkey, Germany, Italy"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            />
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {DISCOVERY_SOURCE_TYPES.map((st) => {
+            const Icon = st.icon;
+            const isSelected = selectedSourceType === st.id;
+            return (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => {
+                  setSelectedSourceType(st.id);
+                  setSources([]);
+                  setSearchedAt(null);
+                  setSelectedUrls(new Set());
+                }}
+                className={`flex items-start gap-3 p-4 rounded-lg border-2 text-left transition-all ${
+                  isSelected
+                    ? "border-orange-500 bg-orange-50 shadow-sm"
+                    : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+                } ${!isSelected && selectedSourceType ? "opacity-60" : ""}`}
+              >
+                <div className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${
+                  isSelected ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-500"
+                }`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className={`text-sm font-medium ${isSelected ? "text-orange-700" : "text-gray-900"}`}>
+                    {st.label}
+                  </div>
+                  <div className="text-xs text-gray-500">{st.description}</div>
+                </div>
+              </button>
+            );
+          })}
         </div>
+      </div>
 
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium rounded-md transition-colors text-sm"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Searching...
-              </>
-            ) : (
-              <>
-                <Search className="w-4 h-4" />
-                Discover Sources
-              </>
-            )}
-          </button>
+      {/* ── STEP 2: Filters (shown after source type selection) ── */}
+      {selectedSourceType && (
+        <form onSubmit={handleSearch} className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+          {isCustomUrl ? (
+            /* Custom URL: single URL input */
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
+              <div className="flex gap-3">
+                <input
+                  type="url"
+                  value={customUrl}
+                  onChange={(e) => setCustomUrl(e.target.value)}
+                  placeholder="https://example.com/exhibitors"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                />
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-md transition-colors text-sm"
+                >
+                  <Pickaxe className="w-4 h-4" />
+                  Mine URL
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Search filters */
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isCustomSearch ? "Search Query" : "Keywords / Name"}
+                  </label>
+                  <input
+                    type="text"
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
+                    placeholder={currentTypeCard?.placeholder || "Enter search keywords..."}
+                    maxLength={300}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
 
-          {loading && (
-            <span className="text-sm text-gray-500">
-              This may take up to 60 seconds (AI web search)
-            </span>
+                {!isCustomSearch && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Industry / Sector</label>
+                    <select
+                      value={industry}
+                      onChange={(e) => setIndustry(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                    >
+                      <option value="">All industries</option>
+                      {INDUSTRY_OPTIONS.map((ind) => (
+                        <option key={ind} value={ind}>{ind}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {!isCustomSearch && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Countries {selectedCountries.length > 0 && <span className="text-orange-500">({selectedCountries.length})</span>}
+                    </label>
+                    <div className="relative">
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) toggleCountry(e.target.value);
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                      >
+                        <option value="">Add country...</option>
+                        {COUNTRY_OPTIONS.filter((c) => !selectedCountries.includes(c)).map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {selectedCountries.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {selectedCountries.map((c) => (
+                          <span
+                            key={c}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs cursor-pointer hover:bg-orange-200"
+                            onClick={() => toggleCountry(c)}
+                          >
+                            {c} <X className="w-3 h-3" />
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium rounded-md transition-colors text-sm"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Searching...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-4 h-4" />
+                      Discover Sources
+                    </>
+                  )}
+                </button>
+
+                {loading && (
+                  <span className="text-sm text-gray-500">
+                    This may take up to 60 seconds (AI web search)
+                  </span>
+                )}
+              </div>
+            </>
           )}
-        </div>
-      </form>
+        </form>
+      )}
 
-      {/* Results */}
+      {/* ── STEP 3: Results ── */}
       {searchedAt && (
-        <div className="mb-4 flex items-center gap-2">
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 text-sm font-medium">
-            {sources.length} sources found
-          </span>
-          <span className="text-xs text-gray-400">
-            Searched at {new Date(searchedAt).toLocaleString()}
-          </span>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 text-sm font-medium">
+              {sources.length} sources found
+            </span>
+            <span className="text-xs text-gray-400">
+              Searched at {new Date(searchedAt).toLocaleString()}
+            </span>
+          </div>
+          {sources.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={selectedUrls.size === sources.length ? deselectAll : selectAll}
+                className="text-xs text-gray-500 hover:text-gray-700 underline"
+              >
+                {selectedUrls.size === sources.length ? "Deselect All" : "Select All"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -529,13 +780,26 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
             const TypeIcon = typeConfig.icon;
             let hostname = "";
             try { hostname = new URL(source.url).hostname; } catch { hostname = source.url; }
+            const isSelected = selectedUrls.has(source.url);
 
             return (
               <div
                 key={idx}
-                className="bg-white border border-gray-200 rounded-lg p-4 hover:border-orange-300 transition-colors"
+                className={`bg-white border-2 rounded-lg p-4 transition-all cursor-pointer ${
+                  isSelected ? "border-orange-400 bg-orange-50/30" : "border-gray-200 hover:border-gray-300"
+                }`}
+                onClick={() => toggleSource(source.url)}
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  {/* Checkbox */}
+                  <div className="flex-shrink-0 pt-0.5">
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                      isSelected ? "bg-orange-500 border-orange-500" : "border-gray-300 bg-white"
+                    }`}>
+                      {isSelected && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                    </div>
+                  </div>
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${typeConfig.color}`}>
@@ -549,7 +813,8 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
                       href={source.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm font-medium text-blue-600 hover:underline flex items-center gap-1 truncate"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-sm font-medium text-blue-600 hover:underline inline-flex items-center gap-1"
                     >
                       {hostname}
                       <ExternalLink className="w-3 h-3 flex-shrink-0" />
@@ -574,7 +839,8 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
                     </div>
 
                     <button
-                      onClick={() => handleMine(source)}
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleMine(source); }}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded-md transition-colors"
                     >
                       <Pickaxe className="w-3.5 h-3.5" />
@@ -588,11 +854,47 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
         </div>
       )}
 
-      {/* Empty state */}
-      {!loading && sources.length === 0 && !searchedAt && (
+      {/* ── Bottom bar: Mine Selected ── */}
+      {sources.length > 0 && (
+        <div className="sticky bottom-0 mt-4 bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between shadow-lg">
+          <div className="text-sm text-gray-600">
+            <span className="font-semibold text-orange-600">{selectedUrls.size}</span> of {sources.length} selected
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={selectedUrls.size === sources.length ? deselectAll : selectAll}
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              {selectedUrls.size === sources.length ? "Deselect All" : "Select All"}
+            </button>
+            <button
+              type="button"
+              onClick={handleMineSelected}
+              disabled={selectedUrls.size === 0 || batchLoading}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors text-sm"
+            >
+              {batchLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating jobs...
+                </>
+              ) : (
+                <>
+                  <Pickaxe className="w-4 h-4" />
+                  Mine Selected ({selectedUrls.size})
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Empty state ── */}
+      {!loading && sources.length === 0 && !searchedAt && !selectedSourceType && (
         <div className="text-center py-16 text-gray-400">
           <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p className="text-lg font-medium">Enter a fair name and industry to discover data sources</p>
+          <p className="text-lg font-medium">Select a source type above to start discovering</p>
           <p className="text-sm mt-1">AI will search the web for relevant company lists, directories, and exhibitor pages</p>
         </div>
       )}
