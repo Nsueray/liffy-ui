@@ -79,31 +79,78 @@ interface SourceTypeCard {
   placeholder: string;
 }
 
-const DISCOVERY_SOURCE_TYPES: SourceTypeCard[] = [
+// Main source types (always visible)
+const MAIN_SOURCE_TYPES: SourceTypeCard[] = [
   { id: "trade_fair", label: "Trade Fair", description: "Exhibitor directories", icon: Factory, placeholder: "e.g. Mega Clima Ghana 2025" },
   { id: "association", label: "Association", description: "Member directories", icon: Building2, placeholder: "e.g. HVAC manufacturers association" },
-  { id: "chamber", label: "Chamber", description: "Commerce members", icon: Landmark, placeholder: "e.g. Istanbul chamber of commerce" },
-  { id: "business_directory", label: "Directory", description: "Business listings", icon: BookOpen, placeholder: "e.g. packaging suppliers Germany" },
-  { id: "company_listing", label: "Catalog", description: "Company pages", icon: ScrollText, placeholder: "e.g. textile manufacturers catalog" },
+  { id: "business_directory", label: "Directory", description: "Kompass, Europages, portals", icon: BookOpen, placeholder: "e.g. packaging suppliers Germany" },
+  { id: "company_listing", label: "Catalog / Listing", description: "WordPress, blogs, any page", icon: ScrollText, placeholder: "e.g. textile manufacturers catalog" },
+  { id: "custom_url", label: "Paste URL", description: "Direct URL input", icon: Link2, placeholder: "https://example.com/members" },
+];
+
+// Extra source types (shown on expand)
+const EXTRA_SOURCE_TYPES: SourceTypeCard[] = [
+  { id: "chamber", label: "Chamber of Commerce", description: "Commerce members", icon: Landmark, placeholder: "e.g. Istanbul chamber of commerce" },
   { id: "trade_portal", label: "Trade Portal", description: "Supplier databases", icon: Globe, placeholder: "e.g. food exporters Turkey" },
   { id: "government_trade", label: "Gov Database", description: "Trade ministries", icon: Landmark, placeholder: "e.g. TOBB exporter list" },
-  { id: "custom_url", label: "Custom URL", description: "Paste any URL", icon: Link2, placeholder: "https://example.com/members" },
   { id: "custom_search", label: "Custom Search", description: "Free keyword search", icon: Search, placeholder: "Type any search query..." },
 ];
 
+const DISCOVERY_SOURCE_TYPES: SourceTypeCard[] = [...MAIN_SOURCE_TYPES, ...EXTRA_SOURCE_TYPES];
+
 const INDUSTRY_OPTIONS = [
-  "HVAC", "Food & Beverage", "Construction", "Packaging", "Textiles",
-  "Automotive", "Energy", "Electronics", "Healthcare", "Chemicals",
-  "Mining", "Agriculture", "Furniture", "Plastics", "Machinery",
-  "Logistics", "IT & Software", "Defense", "Tourism", "Other",
+  "Agriculture & Agribusiness",
+  "Automotive & Auto Parts",
+  "Beauty & Cosmetics",
+  "Chemicals & Petrochemicals",
+  "Construction & Building Materials",
+  "Defense & Security",
+  "Electronics & Electrical",
+  "Energy & Renewable Energy",
+  "Food & Beverage",
+  "Furniture & Home Décor",
+  "Healthcare & Medical Devices",
+  "HVAC & Refrigeration",
+  "IT & Telecommunications",
+  "Logistics & Transport",
+  "Machinery & Industrial Equipment",
+  "Mining & Metals",
+  "Packaging",
+  "Plastics & Rubber",
+  "Printing & Paper",
+  "Security & Safety",
+  "Textiles & Apparel",
+  "Tourism & Hospitality",
+  "Water & Environment",
+  "Other",
+];
+
+const POPULAR_COUNTRIES = [
+  "Turkey", "Germany", "France", "Italy", "Nigeria", "Ghana", "Morocco", "USA", "UK", "UAE",
 ];
 
 const COUNTRY_OPTIONS = [
-  "Turkey", "Germany", "France", "Italy", "Nigeria", "Ghana", "Morocco",
-  "USA", "UK", "China", "India", "UAE", "Spain", "Netherlands", "Belgium",
-  "Poland", "Russia", "Brazil", "Mexico", "Egypt", "Saudi Arabia",
-  "South Africa", "Japan", "South Korea", "Indonesia", "Iran",
-];
+  // Africa
+  "Algeria", "Angola", "Cameroon", "Egypt", "Ethiopia", "Ghana", "Ivory Coast",
+  "Kenya", "Libya", "Morocco", "Mozambique", "Nigeria", "Rwanda", "Senegal",
+  "South Africa", "Tanzania", "Tunisia", "Uganda", "Zimbabwe",
+  // Americas
+  "Argentina", "Brazil", "Canada", "Chile", "Colombia", "Mexico", "Peru", "USA",
+  // Asia
+  "Bangladesh", "China", "India", "Indonesia", "Iran", "Japan", "Kazakhstan",
+  "Malaysia", "Pakistan", "Philippines", "Singapore", "South Korea", "Sri Lanka",
+  "Thailand", "Uzbekistan", "Vietnam",
+  // Europe
+  "Austria", "Belgium", "Bulgaria", "Croatia", "Czech Republic", "Denmark",
+  "Finland", "France", "Germany", "Greece", "Hungary", "Ireland", "Italy",
+  "Netherlands", "Norway", "Poland", "Portugal", "Romania", "Russia", "Serbia",
+  "Spain", "Sweden", "Switzerland", "UK", "Ukraine",
+  // Middle East
+  "Bahrain", "Iraq", "Jordan", "Kuwait", "Lebanon", "Oman", "Qatar",
+  "Saudi Arabia", "Turkey", "UAE",
+  // Oceania
+  "Australia", "New Zealand",
+].filter((c, i, a) => a.indexOf(c) === i).sort(); // dedupe + sort
 
 type MiningJobStatus = "pending" | "running" | "completed" | "failed" | "needs_manual";
 
@@ -568,22 +615,18 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
     }
   };
 
-  const emailIndicator = (value: boolean | "unknown") => {
-    if (value === true) return <span className="text-green-600 font-medium" title="Emails on page">Yes</span>;
-    if (value === false) return <span className="text-red-500 font-medium" title="No emails on page">No</span>;
-    return <span className="text-gray-400" title="Unknown">?</span>;
-  };
+  // "More options" expand state
+  const [showExtraTypes, setShowExtraTypes] = useState(false);
 
   return (
     <div>
-      {/* ── Source Type Selection — compact, collapses when selected ── */}
+      {/* ── Source Type Selection — 5 main + "More options" expandable ── */}
       <div className="mb-4">
         {!selectedSourceType ? (
-          /* No selection: show all cards in compact grid */
           <>
             <p className="text-sm text-gray-500 mb-3">Select a source type to start discovering</p>
             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
-              {DISCOVERY_SOURCE_TYPES.map((st) => {
+              {MAIN_SOURCE_TYPES.map((st) => {
                 const Icon = st.icon;
                 return (
                   <button
@@ -603,6 +646,47 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
                 );
               })}
             </div>
+            {/* More options toggle */}
+            {!showExtraTypes ? (
+              <button
+                type="button"
+                onClick={() => setShowExtraTypes(true)}
+                className="mt-2 text-xs text-gray-400 hover:text-orange-600 inline-flex items-center gap-1"
+              >
+                <ChevronDown className="w-3 h-3" /> More options
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowExtraTypes(false)}
+                  className="mt-2 text-xs text-gray-400 hover:text-orange-600 inline-flex items-center gap-1 mb-2"
+                >
+                  <ChevronUp className="w-3 h-3" /> Less options
+                </button>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {EXTRA_SOURCE_TYPES.map((st) => {
+                    const Icon = st.icon;
+                    return (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSourceType(st.id);
+                          setSources([]);
+                          setSearchedAt(null);
+                          setSelectedUrls(new Set());
+                        }}
+                        className="flex flex-col items-center gap-1 p-3 rounded-lg border border-gray-200 bg-white hover:border-orange-400 hover:bg-orange-50 transition-all text-center"
+                      >
+                        <Icon className="w-5 h-5 text-gray-500" />
+                        <span className="text-xs font-medium text-gray-700 leading-tight">{st.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </>
         ) : (
           /* Selected: show selected card inline + Change button */
@@ -698,7 +782,11 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
                   >
                     <option value="">Add...</option>
-                    {COUNTRY_OPTIONS.filter((c) => !selectedCountries.includes(c)).map((c) => (
+                    {POPULAR_COUNTRIES.filter((c) => !selectedCountries.includes(c)).map((c) => (
+                      <option key={`pop-${c}`} value={c}>{c}</option>
+                    ))}
+                    <option disabled>──────────</option>
+                    {COUNTRY_OPTIONS.filter((c) => !selectedCountries.includes(c) && !POPULAR_COUNTRIES.includes(c)).map((c) => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
@@ -818,7 +906,6 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
                     <span className="text-gray-600 font-medium" title="Estimated companies">
                       {source.estimated_companies || "?"} co.
                     </span>
-                    <span title="Emails on page">{emailIndicator(source.has_email_on_page)}</span>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handleMine(source); }}
