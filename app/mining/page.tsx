@@ -434,7 +434,6 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
     }
 
     if (isCustomUrl) {
-      // Custom URL: directly create a mining job
       if (!customUrl.trim()) {
         toast.error("Please enter a URL");
         return;
@@ -464,8 +463,10 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
       return;
     }
 
-    if (!keyword.trim()) {
-      toast.error("Please enter a search keyword");
+    // FIX 1: keyword is optional — at least one filter required
+    const hasAnyFilter = keyword.trim() || industry || selectedCountries.length > 0;
+    if (!hasAnyFilter) {
+      toast.error("Please enter at least one filter (keyword, industry, or country)");
       return;
     }
 
@@ -482,7 +483,7 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
         method: "POST",
         headers: { ...(getAuthHeaders() ?? {}), "Content-Type": "application/json" },
         body: JSON.stringify({
-          keyword: keyword.trim(),
+          keyword: keyword.trim() || undefined,
           industry: industry || undefined,
           target_countries: selectedCountries,
           source_type: selectedSourceType,
@@ -517,7 +518,6 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
     }
   };
 
-  // ── Mine single source ──
   const handleMine = async (source: Source) => {
     try {
       const res = await fetch("/api/mining/jobs", {
@@ -542,10 +542,8 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
     }
   };
 
-  // ── Mine selected (batch) ──
   const handleMineSelected = async () => {
     if (selectedUrls.size === 0) return;
-
     setBatchLoading(true);
     try {
       const urls = Array.from(selectedUrls).map((url) => ({ url }));
@@ -554,17 +552,13 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
         headers: { ...(getAuthHeaders() ?? {}), "Content-Type": "application/json" },
         body: JSON.stringify({ urls }),
       });
-
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to create mining jobs");
       }
-
       const data = await res.json();
       toast.success(`${data.created} mining jobs created!`);
-      if (data.failed > 0) {
-        toast.error(`${data.failed} URLs failed`);
-      }
+      if (data.failed > 0) toast.error(`${data.failed} URLs failed`);
       setSelectedUrls(new Set());
       onMineCreated();
     } catch (err: unknown) {
@@ -582,199 +576,197 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
 
   return (
     <div>
-      {/* ── STEP 1: Source Type Selection ── */}
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">What do you want to discover?</h2>
-        <p className="text-sm text-gray-500 mb-4">Select a source type, then add filters to find mineable data sources</p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {DISCOVERY_SOURCE_TYPES.map((st) => {
-            const Icon = st.icon;
-            const isSelected = selectedSourceType === st.id;
-            return (
-              <button
-                key={st.id}
-                type="button"
-                onClick={() => {
-                  setSelectedSourceType(st.id);
-                  setSources([]);
-                  setSearchedAt(null);
-                  setSelectedUrls(new Set());
-                }}
-                className={`flex items-start gap-3 p-4 rounded-lg border-2 text-left transition-all ${
-                  isSelected
-                    ? "border-orange-500 bg-orange-50 shadow-sm"
-                    : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
-                } ${!isSelected && selectedSourceType ? "opacity-60" : ""}`}
-              >
-                <div className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${
-                  isSelected ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-500"
-                }`}>
-                  <Icon className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className={`text-sm font-medium ${isSelected ? "text-orange-700" : "text-gray-900"}`}>
-                    {st.label}
-                  </div>
-                  <div className="text-xs text-gray-500">{st.description}</div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+      {/* ── Source Type Selection — compact, collapses when selected ── */}
+      <div className="mb-4">
+        {!selectedSourceType ? (
+          /* No selection: show all cards in compact grid */
+          <>
+            <p className="text-sm text-gray-500 mb-3">Select a source type to start discovering</p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
+              {DISCOVERY_SOURCE_TYPES.map((st) => {
+                const Icon = st.icon;
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSourceType(st.id);
+                      setSources([]);
+                      setSearchedAt(null);
+                      setSelectedUrls(new Set());
+                    }}
+                    className="flex flex-col items-center gap-1 p-3 rounded-lg border border-gray-200 bg-white hover:border-orange-400 hover:bg-orange-50 transition-all text-center"
+                  >
+                    <Icon className="w-5 h-5 text-gray-500" />
+                    <span className="text-xs font-medium text-gray-700 leading-tight">{st.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          /* Selected: show selected card inline + Change button */
+          <div className="flex items-center gap-2">
+            {(() => {
+              const Icon = currentTypeCard!.icon;
+              return (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-50 border border-orange-300 text-orange-700 text-sm font-medium">
+                  <Icon className="w-4 h-4" />
+                  {currentTypeCard!.label}
+                </span>
+              );
+            })()}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedSourceType(null);
+                setSources([]);
+                setSearchedAt(null);
+                setSelectedUrls(new Set());
+              }}
+              className="text-xs text-gray-500 hover:text-orange-600 underline"
+            >
+              Change
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ── STEP 2: Filters (shown after source type selection) ── */}
+      {/* ── Filters + Search (inline, shown after source type selection) ── */}
       {selectedSourceType && (
-        <form onSubmit={handleSearch} className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+        <form onSubmit={handleSearch} className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
           {isCustomUrl ? (
-            /* Custom URL: single URL input */
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
-              <div className="flex gap-3">
-                <input
-                  type="url"
-                  value={customUrl}
-                  onChange={(e) => setCustomUrl(e.target.value)}
-                  placeholder="https://example.com/exhibitors"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                />
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-2 px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-md transition-colors text-sm"
-                >
-                  <Pickaxe className="w-4 h-4" />
-                  Mine URL
-                </button>
-              </div>
+            <div className="flex gap-3">
+              <input
+                type="url"
+                value={customUrl}
+                onChange={(e) => setCustomUrl(e.target.value)}
+                placeholder="https://example.com/exhibitors"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              />
+              <button
+                type="submit"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-md transition-colors text-sm"
+              >
+                <Pickaxe className="w-4 h-4" />
+                Mine
+              </button>
             </div>
           ) : (
-            /* Search filters */
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {isCustomSearch ? "Search Query" : "Keywords / Name"}
-                  </label>
-                  <input
-                    type="text"
-                    value={keyword}
-                    onChange={(e) => setKeyword(e.target.value)}
-                    placeholder={currentTypeCard?.placeholder || "Enter search keywords..."}
-                    maxLength={300}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  />
+            <div className="flex flex-wrap items-end gap-3">
+              {/* Keyword */}
+              <div className="flex-1 min-w-[180px]">
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  {isCustomSearch ? "Search Query" : "Keywords"}
+                </label>
+                <input
+                  type="text"
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  placeholder={currentTypeCard?.placeholder || "Enter keywords..."}
+                  maxLength={300}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                />
+              </div>
+
+              {/* Industry */}
+              {!isCustomSearch && (
+                <div className="w-[160px]">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Industry</label>
+                  <select
+                    value={industry}
+                    onChange={(e) => setIndustry(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                  >
+                    <option value="">Any</option>
+                    {INDUSTRY_OPTIONS.map((ind) => (
+                      <option key={ind} value={ind}>{ind}</option>
+                    ))}
+                  </select>
                 </div>
+              )}
 
-                {!isCustomSearch && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Industry / Sector</label>
-                    <select
-                      value={industry}
-                      onChange={(e) => setIndustry(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
-                    >
-                      <option value="">All industries</option>
-                      {INDUSTRY_OPTIONS.map((ind) => (
-                        <option key={ind} value={ind}>{ind}</option>
-                      ))}
-                    </select>
-                  </div>
+              {/* Country */}
+              {!isCustomSearch && (
+                <div className="w-[160px]">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Country{selectedCountries.length > 0 ? ` (${selectedCountries.length})` : ""}
+                  </label>
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) toggleCountry(e.target.value); }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                  >
+                    <option value="">Add...</option>
+                    {COUNTRY_OPTIONS.filter((c) => !selectedCountries.includes(c)).map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Search button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="inline-flex items-center gap-2 px-5 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium rounded-md transition-colors text-sm h-[38px]"
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4" />
                 )}
+                {loading ? "Searching..." : "Discover"}
+              </button>
+            </div>
+          )}
 
-                {!isCustomSearch && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Countries {selectedCountries.length > 0 && <span className="text-orange-500">({selectedCountries.length})</span>}
-                    </label>
-                    <div className="relative">
-                      <select
-                        value=""
-                        onChange={(e) => {
-                          if (e.target.value) toggleCountry(e.target.value);
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
-                      >
-                        <option value="">Add country...</option>
-                        {COUNTRY_OPTIONS.filter((c) => !selectedCountries.includes(c)).map((c) => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
-                    </div>
-                    {selectedCountries.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {selectedCountries.map((c) => (
-                          <span
-                            key={c}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs cursor-pointer hover:bg-orange-200"
-                            onClick={() => toggleCountry(c)}
-                          >
-                            {c} <X className="w-3 h-3" />
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-4 flex items-center gap-3">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium rounded-md transition-colors text-sm"
+          {/* Country chips */}
+          {!isCustomUrl && !isCustomSearch && selectedCountries.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {selectedCountries.map((c) => (
+                <span
+                  key={c}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs cursor-pointer hover:bg-orange-200"
+                  onClick={() => toggleCountry(c)}
                 >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Searching...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="w-4 h-4" />
-                      Discover Sources
-                    </>
-                  )}
-                </button>
+                  {c} <X className="w-3 h-3" />
+                </span>
+              ))}
+            </div>
+          )}
 
-                {loading && (
-                  <span className="text-sm text-gray-500">
-                    This may take up to 60 seconds (AI web search)
-                  </span>
-                )}
-              </div>
-            </>
+          {loading && (
+            <p className="text-xs text-gray-400 mt-2">This may take up to 60 seconds (AI web search)</p>
           )}
         </form>
       )}
 
-      {/* ── STEP 3: Results ── */}
+      {/* ── Results ── */}
       {searchedAt && (
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 text-sm font-medium">
               {sources.length} sources found
             </span>
             <span className="text-xs text-gray-400">
-              Searched at {new Date(searchedAt).toLocaleString()}
+              {new Date(searchedAt).toLocaleTimeString()}
             </span>
           </div>
           {sources.length > 0 && (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={selectedUrls.size === sources.length ? deselectAll : selectAll}
-                className="text-xs text-gray-500 hover:text-gray-700 underline"
-              >
-                {selectedUrls.size === sources.length ? "Deselect All" : "Select All"}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={selectedUrls.size === sources.length ? deselectAll : selectAll}
+              className="text-xs text-gray-500 hover:text-gray-700 underline"
+            >
+              {selectedUrls.size === sources.length ? "Deselect All" : "Select All"}
+            </button>
           )}
         </div>
       )}
 
       {sources.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {sources.map((source, idx) => {
             const typeConfig = SOURCE_TYPE_CONFIG[source.source_type] || SOURCE_TYPE_CONFIG.other;
             const TypeIcon = typeConfig.icon;
@@ -785,30 +777,27 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
             return (
               <div
                 key={idx}
-                className={`bg-white border-2 rounded-lg p-4 transition-all cursor-pointer ${
+                className={`bg-white border rounded-lg px-3 py-2.5 transition-all cursor-pointer ${
                   isSelected ? "border-orange-400 bg-orange-50/30" : "border-gray-200 hover:border-gray-300"
                 }`}
                 onClick={() => toggleSource(source.url)}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-center gap-3">
                   {/* Checkbox */}
-                  <div className="flex-shrink-0 pt-0.5">
-                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                      isSelected ? "bg-orange-500 border-orange-500" : "border-gray-300 bg-white"
-                    }`}>
-                      {isSelected && <CheckCircle className="w-3.5 h-3.5 text-white" />}
-                    </div>
+                  <div className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                    isSelected ? "bg-orange-500 border-orange-500" : "border-gray-300 bg-white"
+                  }`}>
+                    {isSelected && <CheckCircle className="w-3 h-3 text-white" />}
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${typeConfig.color}`}>
-                        <TypeIcon className="w-3 h-3" />
-                        {typeConfig.label}
-                      </span>
-                      <span className="text-xs text-gray-400">{source.language}</span>
-                    </div>
+                  {/* Type badge */}
+                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium flex-shrink-0 ${typeConfig.color}`}>
+                    <TypeIcon className="w-3 h-3" />
+                    {typeConfig.label}
+                  </span>
 
+                  {/* URL + notes */}
+                  <div className="flex-1 min-w-0">
                     <a
                       href={source.url}
                       target="_blank"
@@ -819,31 +808,23 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
                       {hostname}
                       <ExternalLink className="w-3 h-3 flex-shrink-0" />
                     </a>
-
                     {source.notes && (
-                      <p className="text-xs text-gray-500 mt-1">{source.notes}</p>
+                      <span className="text-xs text-gray-400 ml-2 hidden sm:inline">{source.notes.slice(0, 80)}{source.notes.length > 80 ? "..." : ""}</span>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-4 flex-shrink-0">
-                    <div className="text-center">
-                      <div className="text-lg font-semibold text-gray-900">
-                        {source.estimated_companies || "?"}
-                      </div>
-                      <div className="text-[10px] text-gray-400 uppercase">Companies</div>
-                    </div>
-
-                    <div className="text-center">
-                      <div className="text-sm">{emailIndicator(source.has_email_on_page)}</div>
-                      <div className="text-[10px] text-gray-400 uppercase">Emails</div>
-                    </div>
-
+                  {/* Stats */}
+                  <div className="flex items-center gap-3 flex-shrink-0 text-xs">
+                    <span className="text-gray-600 font-medium" title="Estimated companies">
+                      {source.estimated_companies || "?"} co.
+                    </span>
+                    <span title="Emails on page">{emailIndicator(source.has_email_on_page)}</span>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handleMine(source); }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded-md transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded transition-colors"
                     >
-                      <Pickaxe className="w-3.5 h-3.5" />
+                      <Pickaxe className="w-3 h-3" />
                       Mine
                     </button>
                   </div>
@@ -855,47 +836,31 @@ function DiscoverTab({ onMineCreated }: { onMineCreated: () => void }) {
       )}
 
       {/* ── Bottom bar: Mine Selected ── */}
-      {sources.length > 0 && (
-        <div className="sticky bottom-0 mt-4 bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between shadow-lg">
-          <div className="text-sm text-gray-600">
-            <span className="font-semibold text-orange-600">{selectedUrls.size}</span> of {sources.length} selected
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={selectedUrls.size === sources.length ? deselectAll : selectAll}
-              className="text-sm text-gray-500 hover:text-gray-700 underline"
-            >
-              {selectedUrls.size === sources.length ? "Deselect All" : "Select All"}
-            </button>
-            <button
-              type="button"
-              onClick={handleMineSelected}
-              disabled={selectedUrls.size === 0 || batchLoading}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors text-sm"
-            >
-              {batchLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Creating jobs...
-                </>
-              ) : (
-                <>
-                  <Pickaxe className="w-4 h-4" />
-                  Mine Selected ({selectedUrls.size})
-                </>
-              )}
-            </button>
-          </div>
+      {sources.length > 0 && selectedUrls.size > 0 && (
+        <div className="sticky bottom-0 mt-3 bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-center justify-between shadow-lg">
+          <span className="text-sm text-gray-600">
+            <span className="font-semibold text-orange-600">{selectedUrls.size}</span> selected
+          </span>
+          <button
+            type="button"
+            onClick={handleMineSelected}
+            disabled={batchLoading}
+            className="inline-flex items-center gap-2 px-5 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white font-medium rounded-md transition-colors text-sm"
+          >
+            {batchLoading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</>
+            ) : (
+              <><Pickaxe className="w-4 h-4" /> Mine Selected ({selectedUrls.size})</>
+            )}
+          </button>
         </div>
       )}
 
       {/* ── Empty state ── */}
       {!loading && sources.length === 0 && !searchedAt && !selectedSourceType && (
-        <div className="text-center py-16 text-gray-400">
-          <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p className="text-lg font-medium">Select a source type above to start discovering</p>
-          <p className="text-sm mt-1">AI will search the web for relevant company lists, directories, and exhibitor pages</p>
+        <div className="text-center py-12 text-gray-400">
+          <Search className="w-10 h-10 mx-auto mb-2 opacity-50" />
+          <p className="text-sm font-medium">Select a source type above to start discovering</p>
         </div>
       )}
     </div>
