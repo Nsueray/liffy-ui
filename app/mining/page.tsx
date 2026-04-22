@@ -45,6 +45,9 @@ import {
   Link2,
   ScrollText,
   History,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
 } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════════════════
@@ -196,6 +199,169 @@ type MiningJob = {
 
 type SortField = "created_at" | "name" | "status" | "total_found";
 type SortOrder = "asc" | "desc";
+
+// ═══════════════════════════════════════════════════════════════════
+// MINEABILITY PRE-CHECK
+// ═══════════════════════════════════════════════════════════════════
+
+interface AnalysisResult {
+  mineability: "high" | "medium" | "low";
+  score: number;
+  checks: {
+    reachable: boolean;
+    page_size_kb: number;
+    email_count: number;
+    table_count: number;
+    link_count: number;
+    has_exhibitor_pattern: boolean;
+    js_heavy: boolean;
+    login_required: boolean;
+    blocked: boolean;
+  };
+  badges: string[];
+  warnings: string[];
+  suggested_miner: string;
+  estimated_contacts: number;
+}
+
+async function analyzeUrlPreCheck(url: string): Promise<AnalysisResult | null> {
+  try {
+    const res = await fetch("/api/mining/analyze-url", {
+      method: "POST",
+      headers: { ...(getAuthHeaders() ?? {}), "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function PreCheckModal({
+  analysis,
+  url,
+  onConfirm,
+  onCancel,
+}: {
+  analysis: AnalysisResult;
+  url: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const isLow = analysis.mineability === "low";
+  const hostname = (() => { try { return new URL(url).hostname; } catch { return url; } })();
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCancel}>
+      <div
+        className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className={`px-5 py-4 ${isLow ? "bg-red-50 border-b border-red-100" : "bg-yellow-50 border-b border-yellow-100"}`}>
+          <div className="flex items-center gap-3">
+            {isLow ? (
+              <ShieldAlert className="w-6 h-6 text-red-500 flex-shrink-0" />
+            ) : (
+              <Shield className="w-6 h-6 text-yellow-500 flex-shrink-0" />
+            )}
+            <div>
+              <h3 className={`font-semibold ${isLow ? "text-red-800" : "text-yellow-800"}`}>
+                {isLow ? "Low confidence — mining may not produce results" : "Medium confidence for this URL"}
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">{hostname}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-3 max-h-80 overflow-y-auto">
+          {/* Score bar */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500 w-12">Score</span>
+            <div className="flex-1 bg-gray-100 rounded-full h-2">
+              <div
+                className={`h-2 rounded-full transition-all ${
+                  analysis.score >= 60 ? "bg-green-500" : analysis.score >= 30 ? "bg-yellow-500" : "bg-red-500"
+                }`}
+                style={{ width: `${analysis.score}%` }}
+              />
+            </div>
+            <span className="text-xs font-bold text-gray-700 w-8 text-right">{analysis.score}</span>
+          </div>
+
+          {/* Badges (positive findings) */}
+          {analysis.badges.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-gray-500 mb-1">Found on page</p>
+              <ul className="space-y-1">
+                {analysis.badges.map((b, i) => (
+                  <li key={i} className="text-xs text-green-700 flex items-start gap-1.5">
+                    <CheckCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    {b}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Warnings */}
+          {analysis.warnings.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-gray-500 mb-1">Issues detected</p>
+              <ul className="space-y-1">
+                {analysis.warnings.map((w, i) => (
+                  <li key={i} className="text-xs text-red-700 flex items-start gap-1.5">
+                    <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Estimated contacts */}
+          {analysis.estimated_contacts > 0 && (
+            <p className="text-xs text-gray-600">
+              Estimated contacts: <span className="font-semibold">~{analysis.estimated_contacts}</span>
+            </p>
+          )}
+
+          {/* Suggested miner */}
+          <p className="text-xs text-gray-400">
+            Suggested: {analysis.suggested_miner}
+          </p>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-md hover:bg-gray-100 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`px-4 py-2 text-sm font-medium text-white rounded-md transition-colors ${
+              isLow
+                ? "bg-red-500 hover:bg-red-600"
+                : "bg-orange-500 hover:bg-orange-600"
+            }`}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <Pickaxe className="w-3.5 h-3.5" />
+              Mine Anyway
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -460,6 +626,10 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
   const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
   const [batchLoading, setBatchLoading] = useState(false);
 
+  // Pre-check state
+  const [analyzingUrl, setAnalyzingUrl] = useState<string | null>(null);
+  const [preCheckResult, setPreCheckResult] = useState<{ analysis: AnalysisResult; source: Source } | null>(null);
+
   // Rate limit countdown timer
   useEffect(() => {
     if (rateLimitCountdown <= 0) return;
@@ -604,7 +774,7 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
     }
   };
 
-  const handleMine = async (source: Source) => {
+  const createMiningJob = async (source: Source) => {
     try {
       const res = await fetch("/api/mining/jobs", {
         method: "POST",
@@ -621,10 +791,32 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
         const data = await res.json();
         throw new Error(data.error || "Failed to create mining job");
       }
-      toast.success(`Mining job created for ${(() => { try { return new URL(source.url).hostname; } catch { return source.url; } })()}`);
+      const hostname = (() => { try { return new URL(source.url).hostname; } catch { return source.url; } })();
+      toast.success(`Mining started for ${hostname}`);
       onMineCreated();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to create mining job");
+    }
+  };
+
+  const handleMine = async (source: Source) => {
+    setAnalyzingUrl(source.url);
+    const analysis = await analyzeUrlPreCheck(source.url);
+    setAnalyzingUrl(null);
+
+    if (!analysis) {
+      // Analysis failed — proceed directly
+      await createMiningJob(source);
+      return;
+    }
+
+    if (analysis.mineability === "high") {
+      const emailMsg = analysis.checks.email_count > 0 ? ` — ${analysis.checks.email_count} emails detected` : "";
+      toast.success(`High confidence${emailMsg}`, { duration: 3000 });
+      await createMiningJob(source);
+    } else {
+      // Show modal for medium/low
+      setPreCheckResult({ analysis, source });
     }
   };
 
@@ -953,14 +1145,22 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
                     <span className="text-gray-600 font-medium" title="Estimated companies">
                       {source.estimated_companies || "?"} co.
                     </span>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleMine(source); }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded transition-colors"
-                    >
-                      <Pickaxe className="w-3 h-3" />
-                      Mine
-                    </button>
+                    {analyzingUrl === source.url ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-500 text-xs font-medium rounded">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Analyzing...
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleMine(source); }}
+                        disabled={!!analyzingUrl}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white text-xs font-medium rounded transition-colors"
+                      >
+                        <Pickaxe className="w-3 h-3" />
+                        Mine
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1007,6 +1207,20 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
           <p className="text-sm font-medium">Select a source type above to start discovering</p>
         </div>
       )}
+
+      {/* ── Pre-check modal ── */}
+      {preCheckResult && (
+        <PreCheckModal
+          analysis={preCheckResult.analysis}
+          url={preCheckResult.source.url}
+          onConfirm={async () => {
+            const src = preCheckResult.source;
+            setPreCheckResult(null);
+            await createMiningJob(src);
+          }}
+          onCancel={() => setPreCheckResult(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1021,6 +1235,8 @@ function SearchHistoryTab({ onMineCreated }: { onMineCreated: () => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
   const [batchLoading, setBatchLoading] = useState(false);
+  const [analyzingUrl, setAnalyzingUrl] = useState<string | null>(null);
+  const [preCheckResult, setPreCheckResult] = useState<{ analysis: AnalysisResult; source: Source } | null>(null);
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -1052,7 +1268,7 @@ function SearchHistoryTab({ onMineCreated }: { onMineCreated: () => void }) {
     });
   };
 
-  const handleMine = async (source: Source) => {
+  const createMiningJob = async (source: Source) => {
     try {
       const res = await fetch("/api/mining/jobs", {
         method: "POST",
@@ -1071,9 +1287,28 @@ function SearchHistoryTab({ onMineCreated }: { onMineCreated: () => void }) {
       }
       toast.success("Mining job created!");
       onMineCreated();
-      fetchHistory(); // refresh mining status
+      fetchHistory();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to create mining job");
+    }
+  };
+
+  const handleMine = async (source: Source) => {
+    setAnalyzingUrl(source.url);
+    const analysis = await analyzeUrlPreCheck(source.url);
+    setAnalyzingUrl(null);
+
+    if (!analysis) {
+      await createMiningJob(source);
+      return;
+    }
+
+    if (analysis.mineability === "high") {
+      const emailMsg = analysis.checks.email_count > 0 ? ` — ${analysis.checks.email_count} emails detected` : "";
+      toast.success(`High confidence${emailMsg}`, { duration: 3000 });
+      await createMiningJob(source);
+    } else {
+      setPreCheckResult({ analysis, source });
     }
   };
 
@@ -1246,11 +1481,17 @@ function SearchHistoryTab({ onMineCreated }: { onMineCreated: () => void }) {
                                   <XCircle className="w-3 h-3" />
                                   Failed
                                 </span>
+                              ) : analyzingUrl === source.url ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-500 text-xs font-medium rounded">
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  Analyzing...
+                                </span>
                               ) : (
                                 <button
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); handleMine(source); }}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded transition-colors"
+                                  disabled={!!analyzingUrl}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white text-xs font-medium rounded transition-colors"
                                 >
                                   <Pickaxe className="w-3 h-3" />
                                   Mine
@@ -1289,6 +1530,20 @@ function SearchHistoryTab({ onMineCreated }: { onMineCreated: () => void }) {
           </div>
         );
       })}
+
+      {/* ── Pre-check modal ── */}
+      {preCheckResult && (
+        <PreCheckModal
+          analysis={preCheckResult.analysis}
+          url={preCheckResult.source.url}
+          onConfirm={async () => {
+            const src = preCheckResult.source;
+            setPreCheckResult(null);
+            await createMiningJob(src);
+          }}
+          onCancel={() => setPreCheckResult(null)}
+        />
+      )}
     </div>
   );
 }
