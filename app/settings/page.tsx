@@ -867,6 +867,12 @@ export default function SettingsPage() {
                 {replyTestMessage}
               </p>
             )}
+            {replyHealth.last_test_at && (
+              <p className="text-xs text-gray-500">
+                Last test: {new Date(replyHealth.last_test_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                {replyHealth.test_reply_received ? ' — Successful' : ''}
+              </p>
+            )}
 
             {/* Recent replies */}
             {replyHealth.recent_replies && replyHealth.recent_replies.length > 0 && (
