@@ -364,48 +364,109 @@ export default function CampaignDetailPage() {
           {/* Sequence Progress */}
           {seqProgress && seqProgress.steps && seqProgress.steps.length > 0 && (
             <div className="bg-white rounded-lg border p-5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Sequence Progress</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-gray-700">Sequence Progress</h3>
+                <span className="text-xs text-gray-400">
+                  {seqProgress.completed_steps}/{seqProgress.total_steps} steps completed
+                </span>
+              </div>
               <div className="space-y-3">
                 {seqProgress.steps.map((step: any, idx: number) => {
                   const active = step.recipients?.active || 0;
-                  const completed = step.recipients?.completed || 0;
                   const bounced = step.recipients?.bounced || 0;
-                  const isCurrentStep = active > 0;
-                  const isDone = step.sent_count > 0 && active === 0;
+                  const stepStatus = step.status; // 'completed' | 'waiting' | 'pending'
+                  const eng = step.engagement;
+
+                  // Countdown calculation for waiting steps
+                  let countdown = '';
+                  let isOverdue = false;
+                  if (stepStatus === 'waiting' && step.next_send_at) {
+                    const diff = new Date(step.next_send_at).getTime() - Date.now();
+                    if (diff < 0) {
+                      isOverdue = true;
+                      countdown = 'Overdue';
+                    } else {
+                      const days = Math.floor(diff / 86400000);
+                      const hours = Math.floor((diff % 86400000) / 3600000);
+                      const mins = Math.floor((diff % 3600000) / 60000);
+                      if (days > 0) countdown = `in ${days}d ${hours}h`;
+                      else if (hours > 0) countdown = `in ${hours}h ${mins}m`;
+                      else countdown = `in ${mins}m`;
+                    }
+                  }
+
+                  const conditionLabel = step.condition === 'always' ? 'All recipients'
+                    : step.condition === 'no_open' ? 'Non-openers'
+                    : step.condition === 'no_click' ? 'Non-clickers'
+                    : step.condition === 'no_reply' ? 'Non-repliers'
+                    : step.condition;
+
+                  const borderClass = stepStatus === 'completed' ? 'border-green-200 bg-green-50'
+                    : stepStatus === 'waiting' ? 'border-indigo-200 bg-indigo-50'
+                    : 'border-gray-200 bg-gray-50';
+                  const circleClass = stepStatus === 'completed' ? 'bg-green-500 text-white'
+                    : stepStatus === 'waiting' ? 'bg-indigo-500 text-white'
+                    : 'bg-gray-300 text-white';
+
                   return (
-                    <div key={idx} className={`flex items-center gap-4 p-3 rounded-lg border ${isCurrentStep ? "border-indigo-200 bg-indigo-50" : isDone ? "border-green-100 bg-green-50" : "border-gray-100 bg-gray-50"}`}>
-                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isCurrentStep ? "bg-indigo-500 text-white" : isDone ? "bg-green-500 text-white" : "bg-gray-300 text-white"}`}>
-                        {step.sequence_order}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">
-                          {step.subject || `Step ${step.sequence_order}`}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {step.delay_days === 0 ? "Immediate" : `+${step.delay_days} day${step.delay_days > 1 ? "s" : ""}`}
-                          {step.condition !== "always" && ` \u00b7 ${step.condition === "no_open" ? "Non-openers" : step.condition === "no_click" ? "Non-clickers" : step.condition}`}
-                        </p>
-                      </div>
-                      <div className="flex-shrink-0 text-right">
-                        {isDone ? (
-                          <span className="text-xs font-medium text-green-700">{step.sent_count} sent</span>
-                        ) : isCurrentStep ? (
-                          <span className="text-xs font-medium text-indigo-700">{active} waiting</span>
-                        ) : (
-                          <span className="text-xs text-gray-400">Pending</span>
-                        )}
+                    <div key={idx} className={`p-4 rounded-lg border ${borderClass}`}>
+                      <div className="flex items-start gap-3">
+                        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${circleClass}`}>
+                          {step.sequence_order}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">
+                            {step.subject || `Step ${step.sequence_order}`}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {step.delay_days === 0 ? 'Sent immediately' : `+${step.delay_days} day${step.delay_days > 1 ? 's' : ''} after Step ${step.sequence_order - 1}`}
+                            {' \u00b7 '}{conditionLabel}
+                          </p>
+
+                          {/* Completed step — engagement stats */}
+                          {stepStatus === 'completed' && (
+                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                              <span className="text-gray-700">{step.sent_count.toLocaleString()} sent</span>
+                              {eng && (
+                                <>
+                                  <span className="text-gray-600">{eng.delivery_rate}% delivered</span>
+                                  <span className="text-purple-700">{eng.open_rate}% opened</span>
+                                  <span className="text-blue-700">{eng.clicked} clicked</span>
+                                  <span className="text-orange-600">{eng.bounced} bounced</span>
+                                </>
+                              )}
+                              {!eng && <span className="text-green-700">{step.sent_count} sent</span>}
+                            </div>
+                          )}
+
+                          {/* Waiting step — countdown + recipient counts */}
+                          {stepStatus === 'waiting' && (
+                            <div className="mt-2 space-y-1">
+                              <p className={`text-xs font-medium ${isOverdue ? 'text-red-600' : 'text-indigo-700'}`}>
+                                {isOverdue ? 'Overdue — should have sent already' : `Sends ${countdown}`}
+                                {step.next_send_at && !isOverdue && (
+                                  <span className="text-gray-400 font-normal"> ({formatDate(step.next_send_at)})</span>
+                                )}
+                              </p>
+                              <p className="text-xs text-gray-600">
+                                {active.toLocaleString()} recipients waiting
+                                {bounced > 0 && <span className="text-gray-400"> · {bounced} excluded (bounced)</span>}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Pending step — not yet reached */}
+                          {stepStatus === 'pending' && (
+                            <p className="mt-1.5 text-xs text-gray-400">
+                              Pending — will run after Step {step.sequence_order - 1}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
-              {/* Next send info */}
-              {seqProgress.next_send_at && (
-                <p className="text-xs text-gray-500 mt-3">
-                  Next batch: {formatDate(seqProgress.next_send_at)}
-                  {seqProgress.recipients?.active > 0 && ` \u00b7 ${seqProgress.recipients.active} recipients remaining`}
-                </p>
-              )}
             </div>
           )}
         </div>

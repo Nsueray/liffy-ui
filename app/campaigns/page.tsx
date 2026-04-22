@@ -18,6 +18,11 @@ interface Campaign {
   verification_mode?: string;
   created_at: string;
   creator_name?: string | null;
+  sequence_info?: {
+    total_steps: number;
+    completed_steps: number;
+    next_send_at?: string | null;
+  } | null;
 }
 
 interface ResolveStats {
@@ -390,7 +395,22 @@ export default function CampaignsPage() {
                         </Link>
                         {c.campaign_type === "sequence" && <span className="ml-2 px-1.5 py-0.5 text-[10px] rounded bg-indigo-100 text-indigo-700 font-semibold">SEQ</span>}
                       </td>
-                      <td className="px-6 py-4"><span className={`px-2 py-1 text-xs rounded-full font-semibold ${getStatusBadge(c.status)}`}>{c.status}</span></td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 text-xs rounded-full font-semibold ${getStatusBadge(c.status)}`}>{c.status}</span>
+                        {c.status === 'sequencing' && c.sequence_info && (
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            Step {c.sequence_info.completed_steps}/{c.sequence_info.total_steps}
+                            {c.sequence_info.next_send_at && (() => {
+                              const diff = new Date(c.sequence_info.next_send_at).getTime() - Date.now();
+                              if (diff < 0) return ' · Overdue';
+                              const days = Math.floor(diff / 86400000);
+                              const hours = Math.floor((diff % 86400000) / 3600000);
+                              if (days > 0) return ` · Next in ${days}d`;
+                              return ` · Next in ${hours}h`;
+                            })()}
+                          </p>
+                        )}
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.recipient_count ?? "-"}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.template_name || c.template_subject || "Unknown"}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{c.scheduled_at ? formatDate(c.scheduled_at) : "-"}</td>
