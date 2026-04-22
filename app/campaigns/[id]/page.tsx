@@ -115,6 +115,7 @@ export default function CampaignDetailPage() {
   const [stats, setStats] = useState<CampaignStats | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [seqProgress, setSeqProgress] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -167,6 +168,18 @@ export default function CampaignDetailPage() {
       if (analyticsRes.ok) {
         const analyticsData: AnalyticsData = await analyticsRes.json();
         setAnalytics(analyticsData);
+      }
+
+      // Fetch sequence progress if sequence campaign
+      if (campData.campaign_type === 'sequence') {
+        try {
+          const seqRes = await fetch(`${apiBase}/api/campaigns/${campaignId}/sequence-progress`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (seqRes.ok) {
+            setSeqProgress(await seqRes.json());
+          }
+        } catch { /* ignore */ }
       }
 
     } catch (err: any) {
@@ -255,6 +268,7 @@ export default function CampaignDetailPage() {
       ready: "bg-blue-100 text-blue-800",
       scheduled: "bg-cyan-100 text-cyan-800",
       sending: "bg-green-100 text-green-800",
+      sequencing: "bg-indigo-100 text-indigo-800",
       paused: "bg-orange-100 text-orange-800",
       completed: "bg-purple-100 text-purple-800",
       failed: "bg-red-100 text-red-800",
@@ -341,10 +355,60 @@ export default function CampaignDetailPage() {
 
       {/* Sequence Builder Link (only for sequence campaigns) */}
       {campaign.campaign_type === "sequence" && (
-        <Link href={`/campaigns/${campaign.id}/sequences`}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100 text-sm font-medium">
-          Sequence Builder &rarr;
-        </Link>
+        <div className="space-y-3">
+          <Link href={`/campaigns/${campaign.id}/sequences`}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100 text-sm font-medium">
+            Sequence Builder &rarr;
+          </Link>
+
+          {/* Sequence Progress */}
+          {seqProgress && seqProgress.steps && seqProgress.steps.length > 0 && (
+            <div className="bg-white rounded-lg border p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Sequence Progress</h3>
+              <div className="space-y-3">
+                {seqProgress.steps.map((step: any, idx: number) => {
+                  const active = step.recipients?.active || 0;
+                  const completed = step.recipients?.completed || 0;
+                  const bounced = step.recipients?.bounced || 0;
+                  const isCurrentStep = active > 0;
+                  const isDone = step.sent_count > 0 && active === 0;
+                  return (
+                    <div key={idx} className={`flex items-center gap-4 p-3 rounded-lg border ${isCurrentStep ? "border-indigo-200 bg-indigo-50" : isDone ? "border-green-100 bg-green-50" : "border-gray-100 bg-gray-50"}`}>
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isCurrentStep ? "bg-indigo-500 text-white" : isDone ? "bg-green-500 text-white" : "bg-gray-300 text-white"}`}>
+                        {step.sequence_order}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">
+                          {step.subject || `Step ${step.sequence_order}`}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {step.delay_days === 0 ? "Immediate" : `+${step.delay_days} day${step.delay_days > 1 ? "s" : ""}`}
+                          {step.condition !== "always" && ` \u00b7 ${step.condition === "no_open" ? "Non-openers" : step.condition === "no_click" ? "Non-clickers" : step.condition}`}
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0 text-right">
+                        {isDone ? (
+                          <span className="text-xs font-medium text-green-700">{step.sent_count} sent</span>
+                        ) : isCurrentStep ? (
+                          <span className="text-xs font-medium text-indigo-700">{active} waiting</span>
+                        ) : (
+                          <span className="text-xs text-gray-400">Pending</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Next send info */}
+              {seqProgress.next_send_at && (
+                <p className="text-xs text-gray-500 mt-3">
+                  Next batch: {formatDate(seqProgress.next_send_at)}
+                  {seqProgress.recipients?.active > 0 && ` \u00b7 ${seqProgress.recipients.active} recipients remaining`}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Analytics Summary Cards */}

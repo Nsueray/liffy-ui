@@ -330,6 +330,7 @@ export default function CampaignsPage() {
       ready: "bg-blue-100 text-blue-800",
       scheduled: "bg-indigo-100 text-indigo-800",
       sending: "bg-green-100 text-green-800",
+      sequencing: "bg-indigo-100 text-indigo-800",
       paused: "bg-orange-100 text-orange-800",
       completed: "bg-purple-100 text-purple-800",
       failed: "bg-red-100 text-red-800",
@@ -337,9 +338,9 @@ export default function CampaignsPage() {
     return styles[status] || "bg-gray-100 text-gray-800";
   }
 
-  // Can delete if not sending
+  // Can delete if not sending/sequencing
   function canDelete(status: string) {
-    return status !== 'sending';
+    return status !== 'sending' && status !== 'sequencing';
   }
 
   if (loading) return <div className="p-8">Loading campaigns...</div>;
