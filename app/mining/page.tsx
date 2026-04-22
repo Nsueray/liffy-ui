@@ -1557,6 +1557,7 @@ function NewJobModal({ onClose, onJobCreated }: { onClose: () => void; onJobCrea
   const [jobType, setJobType] = useState<"url" | "file">("url");
   const [name, setName] = useState("");
   const [inputUrl, setInputUrl] = useState("");
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [miningMode, setMiningMode] = useState("full");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -1621,14 +1622,56 @@ function NewJobModal({ onClose, onJobCreated }: { onClose: () => void; onJobCrea
         }
 
         const authHeaders = getAuthHeaders() ?? {};
-        // @ts-ignore
-        delete authHeaders["Content-Type"];
+        const token = (authHeaders as Record<string, string>)?.["Authorization"] || "";
 
-        response = await fetch("/api/mining/jobs", {
-          method: "POST",
-          headers: authHeaders as HeadersInit,
-          body: formData,
+        // Use XMLHttpRequest for upload progress tracking
+        const data = await new Promise<{ success?: boolean; error?: string; details?: string }>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", "/api/mining/jobs");
+          if (token) xhr.setRequestHeader("Authorization", token);
+
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              setUploadProgress(Math.round((e.loaded / e.total) * 100));
+            }
+          };
+
+          xhr.onload = () => {
+            setUploadProgress(null);
+            try {
+              const json = JSON.parse(xhr.responseText);
+              if (xhr.status >= 400) {
+                reject(new Error(json.error || json.details || `Upload failed (HTTP ${xhr.status})`));
+              } else {
+                resolve(json);
+              }
+            } catch {
+              reject(new Error(`Upload failed (HTTP ${xhr.status})`));
+            }
+          };
+
+          xhr.onerror = () => {
+            setUploadProgress(null);
+            reject(new Error("Upload failed — connection error or timeout"));
+          };
+
+          xhr.ontimeout = () => {
+            setUploadProgress(null);
+            reject(new Error("Upload timed out — file may be too large for cloud upload"));
+          };
+
+          xhr.timeout = 600000; // 10 min timeout for large files
+          xhr.send(formData);
         });
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        toast.success("Mining job started successfully!");
+        onJobCreated();
+        onClose();
+        return;
       }
 
       if (!response.ok) {
@@ -1782,6 +1825,11 @@ function NewJobModal({ onClose, onJobCreated }: { onClose: () => void; onJobCrea
                         >
                           Remove File
                         </button>
+                        {selectedFile.size > 100 * 1024 * 1024 && (
+                          <p className="text-xs text-amber-600 mt-1 font-medium">
+                            Large file — upload may take a few minutes
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <>
@@ -1802,7 +1850,7 @@ function NewJobModal({ onClose, onJobCreated }: { onClose: () => void; onJobCrea
                           </label>
                           <p className="pl-1">or drag and drop</p>
                         </div>
-                        <p className="text-xs text-gray-500">PDF, Word, Excel, CSV up to 10MB</p>
+                        <p className="text-xs text-gray-500">PDF, Word, Excel, CSV up to 1GB</p>
                       </>
                     )}
                   </div>
@@ -1854,7 +1902,9 @@ function NewJobModal({ onClose, onJobCreated }: { onClose: () => void; onJobCrea
                     : "bg-blue-600 hover:bg-blue-700 focus:ring-blue-500"
               }`}
             >
-              {loading ? (
+              {loading && uploadProgress !== null ? (
+                `Uploading... ${uploadProgress}%`
+              ) : loading ? (
                 "Starting Job..."
               ) : (
                 <>
@@ -1863,6 +1913,20 @@ function NewJobModal({ onClose, onJobCreated }: { onClose: () => void; onJobCrea
                 </>
               )}
             </button>
+            {uploadProgress !== null && (
+              <div className="mt-2">
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1 text-center">
+                  {uploadProgress < 100 ? `Uploading... ${uploadProgress}%` : 'Processing...'}
+                  {selectedFile && ` (${(selectedFile.size / 1024 / 1024).toFixed(0)} MB)`}
+                </p>
+              </div>
+            )}
           </div>
         </form>
       </div>

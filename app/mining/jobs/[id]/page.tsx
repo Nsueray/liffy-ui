@@ -224,6 +224,33 @@ export default function MiningJobDetailPage() {
         </div>
       )}
 
+      {/* Failed PDF / memory error banner */}
+      {job?.status === "failed" && job?.error && /memory|oom|heap|pdf|ENOMEM/i.test(job.error) && (
+        <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 text-sm text-purple-800">
+          <p className="font-semibold">This PDF exceeded memory limits during processing.</p>
+          <p className="mt-1">Try uploading a smaller version or split the PDF into parts.</p>
+          <div className="mt-3 flex gap-2">
+            {job.input && job.type === 'url' && (
+              <a
+                href={job.input}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center rounded-md border border-purple-300 px-3 py-1.5 text-xs font-medium text-purple-800 hover:bg-purple-100"
+              >
+                Download PDF
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={() => router.push("/mining/jobs/new?tab=file")}
+              className="inline-flex items-center rounded-md border border-purple-300 px-3 py-1.5 text-xs font-medium text-purple-800 hover:bg-purple-100"
+            >
+              Retry with File Upload
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Error / Loading durumları */}
       {loading && (
         <div className="rounded-md border border-gray-200 bg-white p-4 text-sm text-gray-600">
