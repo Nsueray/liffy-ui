@@ -71,6 +71,11 @@ export default function SettingsPage() {
   const [zohoMessage, setZohoMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [zohoShowSecrets, setZohoShowSecrets] = useState(false);
 
+  // States for Reply Detection Health
+  const [replyHealth, setReplyHealth] = useState<any>(null);
+  const [replyTestLoading, setReplyTestLoading] = useState(false);
+  const [replyTestMessage, setReplyTestMessage] = useState<string | null>(null);
+
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://api.liffy.app";
   const getToken = () => localStorage.getItem('liffy_token');
 
@@ -103,6 +108,16 @@ export default function SettingsPage() {
         const data = await sendersRes.json();
         setSenders(data.items || []);
       }
+
+      // 3. Get Reply Health
+      try {
+        const rhRes = await fetch(`${apiBase}/api/settings/reply-health`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (rhRes.ok) {
+          setReplyHealth(await rhRes.json());
+        }
+      } catch { /* ignore */ }
     } catch (err) {
       console.error("Failed to load settings", err);
     }
@@ -381,6 +396,46 @@ export default function SettingsPage() {
       setZohoMessage({ type: 'error', text: err.message });
     } finally {
       setZohoRemoveLoading(false);
+    }
+  };
+
+  // --- HANDLERS: REPLY TEST ---
+  const handleReplyTest = async () => {
+    const token = getToken();
+    if (!token) return;
+    setReplyTestLoading(true);
+    setReplyTestMessage(null);
+    try {
+      const res = await fetch(`${apiBase}/api/settings/reply-test`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to send test');
+      }
+      const data = await res.json();
+      setReplyTestMessage(data.message);
+
+      // Auto-refresh reply health after 30 seconds to check for test reply
+      setTimeout(async () => {
+        try {
+          const rhRes = await fetch(`${apiBase}/api/settings/reply-health`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (rhRes.ok) {
+            const rh = await rhRes.json();
+            setReplyHealth(rh);
+            if (rh.test_reply_received) {
+              setReplyTestMessage('Reply detection is working! Test reply received.');
+            }
+          }
+        } catch { /* ignore */ }
+      }, 30000);
+    } catch (err: any) {
+      setReplyTestMessage(`Error: ${err.message}`);
+    } finally {
+      setReplyTestLoading(false);
     }
   };
 
@@ -719,6 +774,125 @@ export default function SettingsPage() {
               Credentials are validated by connecting to Zoho CRM API. If validation fails, credentials are not stored.
             </p>
           </div>
+        )}
+      </div>
+
+      {/* SECTION 5: REPLY DETECTION HEALTH */}
+      <div className="bg-white p-6 rounded-lg border shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold">Reply Detection</h2>
+            <p className="text-sm text-gray-500">Monitor inbound reply detection via Gmail forwarding.</p>
+          </div>
+          {replyHealth && (
+            <div className="flex items-center gap-2">
+              <span className={`inline-block w-2 h-2 rounded-full ${
+                replyHealth.status === 'active' ? 'bg-green-500' : replyHealth.status === 'warning' ? 'bg-yellow-500' : 'bg-red-500'
+              }`}></span>
+              <span className={`text-sm font-medium ${
+                replyHealth.status === 'active' ? 'text-green-700' : replyHealth.status === 'warning' ? 'text-yellow-700' : 'text-red-600'
+              }`}>
+                {replyHealth.status === 'active' ? 'Active' : replyHealth.status === 'warning' ? 'Warning' : 'Not Working'}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {replyHealth ? (
+          <div className="space-y-4">
+            {/* Status warning banners */}
+            {replyHealth.status === 'warning' && (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                No replies detected in the last 7 days. Please verify your Gmail Content Compliance rule is active.
+              </div>
+            )}
+            {replyHealth.status === 'error' && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                Reply detection may not be working. No replies in the last 30 days. Check Gmail Admin Console settings.
+              </div>
+            )}
+
+            {/* Config info */}
+            <div className="grid grid-cols-2 gap-4 max-w-xl">
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500">Mode</p>
+                <p className="text-sm font-medium">{replyHealth.mode}</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500">Forward Address</p>
+                <p className="text-sm font-mono font-medium">{replyHealth.forward_address}</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500">Replies (7 days)</p>
+                <p className="text-sm font-bold">{replyHealth.replies_7d}</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500">Last Reply</p>
+                <p className="text-sm font-medium">
+                  {replyHealth.last_reply
+                    ? new Date(replyHealth.last_reply).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                    : 'Never'}
+                </p>
+              </div>
+            </div>
+
+            {/* Gmail filter info */}
+            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg max-w-xl">
+              <p className="text-xs font-medium text-blue-700 mb-1">Gmail Content Compliance Filter</p>
+              <p className="text-xs text-blue-600">
+                Header match: <code className="bg-blue-100 px-1 rounded">{replyHealth.gmail_filter}</code>
+                {' '}&rarr; Forward to <code className="bg-blue-100 px-1 rounded">{replyHealth.forward_address}</code>
+              </p>
+            </div>
+
+            {/* Test button */}
+            <div className="flex items-center gap-3 max-w-xl">
+              <button
+                onClick={handleReplyTest}
+                disabled={replyTestLoading}
+                className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                {replyTestLoading ? 'Sending...' : 'Send Test Reply'}
+              </button>
+              {replyHealth.test_reply_received && (
+                <span className="text-sm text-green-600 font-medium">Reply detection verified!</span>
+              )}
+            </div>
+            {replyTestMessage && (
+              <p className={`text-xs max-w-xl ${
+                replyTestMessage.startsWith('Error') ? 'text-red-600'
+                : replyTestMessage.includes('working') ? 'text-green-600'
+                : 'text-gray-600'
+              }`}>
+                {replyTestMessage}
+              </p>
+            )}
+
+            {/* Recent replies */}
+            {replyHealth.recent_replies && replyHealth.recent_replies.length > 0 && (
+              <div className="max-w-xl">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Recent Replies</h3>
+                <div className="space-y-1">
+                  {replyHealth.recent_replies.map((r: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between text-xs py-1.5 px-2 rounded bg-gray-50">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-medium text-gray-700 truncate">{r.email}</span>
+                        {r.subject && <span className="text-gray-400 truncate hidden sm:inline">&mdash; {r.subject}</span>}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-gray-400 truncate max-w-[120px]">{r.campaign_name}</span>
+                        <span className="text-gray-400">
+                          {new Date(r.occurred_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">Loading reply detection status...</p>
         )}
       </div>
 
