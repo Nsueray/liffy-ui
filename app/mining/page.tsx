@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState, useCallback } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "react-hot-toast";
@@ -74,6 +74,41 @@ interface DuplicateInfo {
   total_found: number;
   mined_at: string;
 }
+
+// ── CSV Export utility ──
+function exportSourcesCsv(sources: Source[], filenameParts: string[]) {
+  const header = "URL,Source Type,Notes,Estimated Companies,Mining Status,Mined Date";
+  const rows = sources.map((s) => {
+    const miningStatus = s.mining_status === "completed"
+      ? `Mined — ${s.mining_found ?? 0} found`
+      : s.mining_status === "running" ? "Mining..."
+      : s.mining_status === "pending" ? "Pending"
+      : s.mining_status === "failed" ? "Failed"
+      : "Not mined";
+    const minedDate = s.mined_at ? new Date(s.mined_at).toLocaleDateString("en-US") : "";
+    const esc = (v: string) => `"${(v || "").replace(/"/g, '""')}"`;
+    return [esc(s.url), esc(s.source_type), esc(s.notes || ""), s.estimated_companies || 0, esc(miningStatus), esc(minedDate)].join(",");
+  });
+  const csv = [header, ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const parts = filenameParts.filter(Boolean).map(p => p.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()).join("-");
+  a.download = `liffy-discovery-${parts}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Search loading messages ──
+const SEARCH_MESSAGES = [
+  "Searching the web for sources...",
+  "Analyzing industry directories...",
+  "Finding company listings...",
+  "Checking member directories...",
+  "Verifying source quality...",
+  "Almost there...",
+];
 
 interface DiscoverySearch {
   id: string;
@@ -646,6 +681,10 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
     newUrls: string[];
   } | null>(null);
 
+  // Search abort + loading message
+  const abortRef = useRef<AbortController | null>(null);
+  const [loadingMsg, setLoadingMsg] = useState("");
+
   // Rate limit countdown timer
   useEffect(() => {
     if (rateLimitCountdown <= 0) return;
@@ -737,9 +776,18 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
     setSources([]);
     setSearchedAt(null);
     setSelectedUrls(new Set());
+    setLoadingMsg(SEARCH_MESSAGES[0]);
+
+    // Cycle loading messages every 5s
+    let msgIdx = 0;
+    const msgInterval = setInterval(() => {
+      msgIdx = (msgIdx + 1) % SEARCH_MESSAGES.length;
+      setLoadingMsg(SEARCH_MESSAGES[msgIdx]);
+    }, 5000);
 
     try {
       const controller = new AbortController();
+      abortRef.current = controller;
       const timeoutId = setTimeout(() => controller.abort(), 90000);
 
       const res = await fetch("/api/source-discovery", {
@@ -781,13 +829,20 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
       }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") {
-        toast.error("Request timed out. Try again with narrower search terms.");
+        toast.error("Search cancelled or timed out.");
       } else {
         toast.error(err instanceof Error ? err.message : "An error occurred");
       }
     } finally {
+      clearInterval(msgInterval);
       setLoading(false);
+      setLoadingMsg("");
+      abortRef.current = null;
     }
+  };
+
+  const handleCancelSearch = () => {
+    abortRef.current?.abort();
   };
 
   const createMiningJob = async (source: Source) => {
@@ -1092,7 +1147,16 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
           )}
 
           {loading && (
-            <p className="text-xs text-gray-400 mt-2">This may take up to 60 seconds (AI web search)</p>
+            <div className="mt-2 flex items-center gap-3">
+              <p className="text-xs text-gray-500 animate-pulse">{loadingMsg || "Searching..."}</p>
+              <button
+                type="button"
+                onClick={handleCancelSearch}
+                className="text-xs text-red-500 hover:text-red-700 underline"
+              >
+                Cancel
+              </button>
+            </div>
           )}
           {rateLimitCountdown > 0 && (
             <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-md">
@@ -1103,6 +1167,26 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
             </div>
           )}
         </form>
+      )}
+
+      {/* ── Skeleton loading cards ── */}
+      {loading && (
+        <div className="space-y-2 mt-1">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white border border-gray-200 rounded-lg px-3 py-2.5">
+              <div className="flex items-center gap-3 animate-pulse">
+                <div className="w-4 h-4 rounded bg-gray-200" />
+                <div className="w-16 h-5 rounded bg-gray-200" />
+                <div className="flex-1 space-y-1">
+                  <div className="h-4 bg-gray-200 rounded w-48" />
+                  <div className="h-3 bg-gray-100 rounded w-64" />
+                </div>
+                <div className="w-12 h-4 bg-gray-200 rounded" />
+                <div className="w-16 h-7 bg-gray-200 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* ── Results ── */}
@@ -1116,15 +1200,27 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
               {new Date(searchedAt).toLocaleTimeString()}
             </span>
           </div>
-          {sources.length > 0 && (
-            <button
-              type="button"
-              onClick={selectedUrls.size === sources.length ? deselectAll : selectAll}
-              className="text-xs text-gray-500 hover:text-gray-700 underline"
-            >
-              {selectedUrls.size === sources.length ? "Deselect All" : "Select All"}
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {sources.length > 0 && (
+              <button
+                type="button"
+                onClick={() => exportSourcesCsv(sources, [selectedSourceType || "discovery", industry, keyword])}
+                className="text-xs text-gray-400 hover:text-orange-600 inline-flex items-center gap-1"
+              >
+                <Download className="w-3 h-3" />
+                Export CSV
+              </button>
+            )}
+            {sources.length > 0 && (
+              <button
+                type="button"
+                onClick={selectedUrls.size === sources.length ? deselectAll : selectAll}
+                className="text-xs text-gray-500 hover:text-gray-700 underline"
+              >
+                {selectedUrls.size === sources.length ? "Deselect All" : "Select All"}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -1434,6 +1530,10 @@ function SearchHistoryTab({ onMineCreated }: { onMineCreated: () => void }) {
   const [analyzingUrl, setAnalyzingUrl] = useState<string | null>(null);
   const [preCheckResult, setPreCheckResult] = useState<{ analysis: AnalysisResult; source: Source } | null>(null);
 
+  // Filters
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterKeyword, setFilterKeyword] = useState("");
+
   const fetchHistory = useCallback(async () => {
     try {
       setLoading(true);
@@ -1563,9 +1663,59 @@ function SearchHistoryTab({ onMineCreated }: { onMineCreated: () => void }) {
     );
   }
 
+  const hasFilters = filterType !== "all" || filterKeyword.trim().length > 0;
+  const filteredSearches = searches.filter((s) => {
+    if (filterType !== "all" && s.source_type !== filterType) return false;
+    if (filterKeyword.trim()) {
+      const q = filterKeyword.trim().toLowerCase();
+      const haystack = [s.keyword, s.industry, ...(s.countries || [])].filter(Boolean).join(" ").toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+
   return (
     <div className="space-y-2">
-      {searches.map((s) => {
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2 mb-1">
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="px-2.5 py-1.5 border border-gray-300 rounded-md text-xs bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+        >
+          <option value="all">All Types</option>
+          <option value="trade_fair">Trade Fair</option>
+          <option value="association">Association</option>
+          <option value="business_directory">Directory</option>
+          <option value="company_listing">Catalog</option>
+          <option value="chamber">Chamber</option>
+          <option value="trade_portal">Trade Portal</option>
+          <option value="government_trade">Gov DB</option>
+          <option value="custom_search">Custom</option>
+          <option value="custom_url">URL</option>
+        </select>
+        <input
+          type="text"
+          value={filterKeyword}
+          onChange={(e) => setFilterKeyword(e.target.value)}
+          placeholder="Search history..."
+          className="px-2.5 py-1.5 border border-gray-300 rounded-md text-xs flex-1 min-w-[120px] max-w-[200px] focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+        />
+        <span className="text-xs text-gray-400">
+          Showing {filteredSearches.length} of {searches.length}
+        </span>
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setFilterType("all"); setFilterKeyword(""); }}
+            className="text-xs text-orange-500 hover:text-orange-700 underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {filteredSearches.map((s) => {
         const isExpanded = expandedId === s.id;
         // Build search description
         const descParts = [s.keyword, s.industry, ...(s.countries || [])].filter(Boolean);
@@ -1602,6 +1752,18 @@ function SearchHistoryTab({ onMineCreated }: { onMineCreated: () => void }) {
             {/* Expanded results */}
             {isExpanded && (
               <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/50">
+                {s.results.length > 0 && (
+                  <div className="flex items-center justify-end mb-2">
+                    <button
+                      type="button"
+                      onClick={() => exportSourcesCsv(s.results, [s.source_type, s.keyword || "", s.industry || ""])}
+                      className="text-xs text-gray-400 hover:text-orange-600 inline-flex items-center gap-1"
+                    >
+                      <Download className="w-3 h-3" />
+                      Export CSV
+                    </button>
+                  </div>
+                )}
                 {s.results.length === 0 ? (
                   <p className="text-xs text-gray-400 py-2">No results in this search.</p>
                 ) : (
