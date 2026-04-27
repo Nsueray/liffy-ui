@@ -64,6 +64,15 @@ interface Source {
   mining_status?: string | null;
   mining_found?: number;
   mining_job_id?: string;
+  mined_at?: string | null;
+}
+
+interface DuplicateInfo {
+  url: string;
+  job_id: string;
+  status: string;
+  total_found: number;
+  mined_at: string;
 }
 
 interface DiscoverySearch {
@@ -630,6 +639,13 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
   const [analyzingUrl, setAnalyzingUrl] = useState<string | null>(null);
   const [preCheckResult, setPreCheckResult] = useState<{ analysis: AnalysisResult; source: Source } | null>(null);
 
+  // Duplicate confirmation state
+  const [duplicateConfirm, setDuplicateConfirm] = useState<{ source: Source } | null>(null);
+  const [batchDuplicateConfirm, setBatchDuplicateConfirm] = useState<{
+    duplicates: DuplicateInfo[];
+    newUrls: string[];
+  } | null>(null);
+
   // Rate limit countdown timer
   useEffect(() => {
     if (rateLimitCountdown <= 0) return;
@@ -799,7 +815,13 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
     }
   };
 
-  const handleMine = async (source: Source) => {
+  const handleMine = async (source: Source, force = false) => {
+    // Check if already mined (from prior_mining data) — show confirmation
+    if (!force && source.mining_status && ['completed', 'running', 'pending'].includes(source.mining_status)) {
+      setDuplicateConfirm({ source });
+      return;
+    }
+
     setAnalyzingUrl(source.url);
     const analysis = await analyzeUrlPreCheck(source.url);
     setAnalyzingUrl(null);
@@ -820,7 +842,7 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
     }
   };
 
-  const handleMineSelected = async () => {
+  const handleMineSelected = async (force = false) => {
     if (selectedUrls.size === 0) return;
     setBatchLoading(true);
     try {
@@ -828,13 +850,27 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
       const res = await fetch("/api/mining/batch-create", {
         method: "POST",
         headers: { ...(getAuthHeaders() ?? {}), "Content-Type": "application/json" },
-        body: JSON.stringify({ urls }),
+        body: JSON.stringify({ urls, force }),
       });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to create mining jobs");
       }
       const data = await res.json();
+
+      // Handle duplicates — show confirmation modal
+      if (data.duplicates?.length > 0 && !force) {
+        const newUrls = (data.jobs || []).map((j: { input: string }) => j.input);
+        setBatchDuplicateConfirm({ duplicates: data.duplicates, newUrls });
+        if (data.created > 0) {
+          toast.success(`${data.created} new mining jobs created`);
+        }
+        setSelectedUrls(new Set());
+        onMineCreated();
+        setBatchLoading(false);
+        return;
+      }
+
       toast.success(`${data.created} mining jobs created!`);
       if (data.failed > 0) toast.error(`${data.failed} URLs failed`);
       setSelectedUrls(new Set());
@@ -1140,12 +1176,50 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
                     )}
                   </div>
 
-                  {/* Stats */}
-                  <div className="flex items-center gap-3 flex-shrink-0 text-xs">
+                  {/* Stats + Mine/Status */}
+                  <div className="flex items-center gap-2 flex-shrink-0 text-xs">
                     <span className="text-gray-600 font-medium" title="Estimated companies">
                       {source.estimated_companies || "?"} co.
                     </span>
-                    {analyzingUrl === source.url ? (
+                    {source.mining_status === "completed" ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 border border-green-200 text-green-700 text-xs font-medium">
+                          <CheckCircle className="w-3 h-3" />
+                          Mined &mdash; {source.mining_found ?? 0} found
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleMine(source); }}
+                          className="text-[11px] text-gray-400 hover:text-orange-600 underline"
+                        >
+                          Mine Again
+                        </button>
+                      </div>
+                    ) : source.mining_status === "running" ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-medium">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Mining...
+                      </span>
+                    ) : source.mining_status === "pending" ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-medium">
+                        <Clock className="w-3 h-3" />
+                        Pending
+                      </span>
+                    ) : source.mining_status === "failed" ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
+                          <XCircle className="w-3 h-3" />
+                          Failed
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleMine(source, true); }}
+                          className="text-[11px] text-red-500 hover:text-red-700 underline"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : analyzingUrl === source.url ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-500 text-xs font-medium rounded">
                         <Loader2 className="w-3 h-3 animate-spin" />
                         Analyzing...
@@ -1187,7 +1261,7 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
           </span>
           <button
             type="button"
-            onClick={handleMineSelected}
+            onClick={() => handleMineSelected()}
             disabled={batchLoading}
             className="inline-flex items-center gap-2 px-5 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 text-white font-medium rounded-md transition-colors text-sm"
           >
@@ -1220,6 +1294,128 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
           }}
           onCancel={() => setPreCheckResult(null)}
         />
+      )}
+
+      {/* ── Duplicate confirmation modal (single URL) ── */}
+      {duplicateConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDuplicateConfirm(null)}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 bg-yellow-50 border-b border-yellow-100">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-6 h-6 text-yellow-500 flex-shrink-0" />
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Already Mined</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {(() => { try { return new URL(duplicateConfirm.source.url).hostname; } catch { return duplicateConfirm.source.url; } })()}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-sm text-gray-700">
+                This URL was already mined
+                {duplicateConfirm.source.mining_found ? ` (${duplicateConfirm.source.mining_found} contacts found` : " ("}
+                {duplicateConfirm.source.mined_at
+                  ? ` on ${new Date(duplicateConfirm.source.mined_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                  : ""}
+                ). Mine again?
+              </p>
+            </div>
+            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDuplicateConfirm(null)}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-md hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const src = duplicateConfirm.source;
+                  setDuplicateConfirm(null);
+                  await handleMine(src, true);
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-md transition-colors inline-flex items-center gap-1.5"
+              >
+                <Pickaxe className="w-3.5 h-3.5" />
+                Mine Again
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Batch duplicate confirmation modal ── */}
+      {batchDuplicateConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setBatchDuplicateConfirm(null)}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 bg-yellow-50 border-b border-yellow-100">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-6 h-6 text-yellow-500 flex-shrink-0" />
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Some URLs Already Mined</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {batchDuplicateConfirm.duplicates.length} already mined
+                    {batchDuplicateConfirm.newUrls.length > 0 ? `, ${batchDuplicateConfirm.newUrls.length} new jobs created` : ""}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="px-5 py-4 max-h-60 overflow-y-auto">
+              <p className="text-xs font-medium text-gray-500 mb-2">Previously mined URLs:</p>
+              <div className="space-y-1.5">
+                {batchDuplicateConfirm.duplicates.map((d, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0" />
+                    <span className="text-gray-600 truncate flex-1">
+                      {(() => { try { return new URL(d.url).hostname; } catch { return d.url; } })()}
+                    </span>
+                    <span className="text-gray-400 flex-shrink-0">
+                      {d.total_found} found &middot; {d.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setBatchDuplicateConfirm(null)}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-md hover:bg-gray-100 transition-colors"
+              >
+                OK
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const dupUrls = batchDuplicateConfirm.duplicates.map(d => ({ url: d.url }));
+                  setBatchDuplicateConfirm(null);
+                  setBatchLoading(true);
+                  try {
+                    const res = await fetch("/api/mining/batch-create", {
+                      method: "POST",
+                      headers: { ...(getAuthHeaders() ?? {}), "Content-Type": "application/json" },
+                      body: JSON.stringify({ urls: dupUrls, force: true }),
+                    });
+                    if (!res.ok) throw new Error("Failed to create mining jobs");
+                    const data = await res.json();
+                    toast.success(`${data.created} re-mine jobs created!`);
+                    onMineCreated();
+                  } catch (err: unknown) {
+                    toast.error(err instanceof Error ? err.message : "Failed to re-mine");
+                  } finally {
+                    setBatchLoading(false);
+                  }
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-md transition-colors inline-flex items-center gap-1.5"
+              >
+                <Pickaxe className="w-3.5 h-3.5" />
+                Re-mine All ({batchDuplicateConfirm.duplicates.length})
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
