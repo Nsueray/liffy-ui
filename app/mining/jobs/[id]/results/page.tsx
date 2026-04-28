@@ -1106,7 +1106,7 @@ export default function MiningJobResultsPage() {
           </div>
           {((importProgress.errors?.length || 0) > 0) && (
             <div className="text-xs text-green-600 mt-1">
-              {importProgress.errors.length} row errors
+              {importProgress.errors?.length ?? 0} row errors
             </div>
           )}
         </div>
