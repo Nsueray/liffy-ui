@@ -1468,7 +1468,7 @@ function DiscoverTab({ onMineCreated, onViewHistory }: { onMineCreated: () => vo
                       {(() => { try { return new URL(d.url).hostname; } catch { return d.url; } })()}
                     </span>
                     <span className="text-gray-400 flex-shrink-0">
-                      {d.total_found} found &middot; {d.status}
+                      {d.total_found} contacts &middot; {d.status}
                     </span>
                   </div>
                 ))}
@@ -2541,9 +2541,9 @@ function JobsTab({ refreshKey }: { refreshKey: number }) {
                   </th>
                   <th className="px-4 py-3 text-center">Progress</th>
                   <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => handleSort("total_found")}>
-                    Found <SortIcon field="total_found" />
+                    Contacts <SortIcon field="total_found" />
                   </th>
-                  <th className="px-4 py-3 text-right">Emails</th>
+                  <th className="px-4 py-3 text-right">Raw</th>
                   <th className="px-4 py-3 text-left">By</th>
                   <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100" onClick={() => handleSort("created_at")}>
                     Created <SortIcon field="created_at" />

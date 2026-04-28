@@ -356,15 +356,15 @@ export default function MiningJobDetailPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Records Found</dt>
+                  <dt className="text-gray-500">Unique Contacts</dt>
                   <dd>{job.total_found ?? 0}</dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Emails Found</dt>
+                  <dt className="text-gray-500">Raw Entries</dt>
                   <dd>{job.total_emails_raw ?? 0}</dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Prospects Created</dt>
+                  <dt className="text-gray-500">Imported</dt>
                   <dd>{job.total_prospects_created ?? 0}</dd>
                 </div>
               </dl>

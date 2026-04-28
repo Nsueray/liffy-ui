@@ -989,7 +989,7 @@ export default function MiningJobResultsPage() {
           <div>
             <h1 className="text-2xl font-semibold">Mining Results Review</h1>
             <p className="text-sm text-gray-500">
-              {job?.name || `Job ${jobId}`} • {totalFromServer} results found
+              {job?.name || `Job ${jobId}`} • {totalFromServer} raw entries
             </p>
           </div>
           {/* Single domain warning inline badge */}
@@ -1095,12 +1095,7 @@ export default function MiningJobResultsPage() {
               Importing...
             </span>
             <span>
-              {importProgress.imported || 0} / {importProgress.total || "?"} imported
-              {importProgress.persons_upserted != null && (
-                <span className="text-green-600 ml-1">
-                  ({importProgress.persons_upserted} persons, {importProgress.affiliations_upserted || 0} affiliations)
-                </span>
-              )}
+              {importProgress.imported || 0} imported, {importProgress.skipped || 0} failed, {importProgress.duplicates || 0} skipped
             </span>
           </div>
           <div className="w-full bg-green-200 rounded-full h-2.5">
@@ -1109,9 +1104,9 @@ export default function MiningJobResultsPage() {
               style={{ width: `${importProgress.total ? Math.round((importProgress.imported || 0) / importProgress.total * 100) : 0}%` }}
             />
           </div>
-          {(importProgress.skipped || 0) > 0 && (
+          {((importProgress.errors?.length || 0) > 0) && (
             <div className="text-xs text-green-600 mt-1">
-              {importProgress.skipped} skipped, {importProgress.duplicates || 0} duplicates
+              {importProgress.errors.length} row errors
             </div>
           )}
         </div>
@@ -1122,9 +1117,7 @@ export default function MiningJobResultsPage() {
         <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800 flex items-center gap-2">
           <CheckCircle className="h-4 w-4 flex-shrink-0" />
           <span>
-            Import completed: {importProgress.imported || 0} imported
-            {importProgress.persons_upserted != null && ` (${importProgress.persons_upserted} persons, ${importProgress.affiliations_upserted || 0} affiliations)`}
-            {(importProgress.skipped || 0) > 0 && `, ${importProgress.skipped} skipped`}
+            Import completed: {importProgress.imported || 0} imported, {importProgress.skipped || 0} failed, {importProgress.duplicates || 0} skipped
           </span>
         </div>
       )}
@@ -1586,9 +1579,9 @@ export default function MiningJobResultsPage() {
                   📊 Import Preview
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>Total results: <strong>{importPreview.total_results}</strong></div>
+                  <div>Raw entries: <strong>{importPreview.total_results}</strong></div>
                   <div>With email: <strong className="text-green-600">{importPreview.with_email}</strong></div>
-                  <div>Importable: <strong className="text-blue-600">{importPreview.importable}</strong></div>
+                  <div>Pending import: <strong className="text-blue-600">{importPreview.importable}</strong></div>
                   <div>Already imported: <strong className="text-gray-500">{importPreview.already_imported}</strong></div>
                 </div>
               </div>
