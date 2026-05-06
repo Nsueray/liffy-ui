@@ -326,16 +326,22 @@ export default function ContactsPage() {
       const response = await fetch(`${API_BASE}/api/persons/export?${params}`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
-      if (!response.ok) throw new Error('Export failed');
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => '');
+        throw new Error(errBody || `Export failed (${response.status})`);
+      }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `contacts-export.${format}`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Export error:', err);
+      alert(err instanceof Error ? err.message : 'Export failed');
     } finally {
       setExporting(false);
     }

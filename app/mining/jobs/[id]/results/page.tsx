@@ -33,6 +33,7 @@ import { getAuthHeaders } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 const isDev = process.env.NODE_ENV !== "production";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.liffy.app";
 
 // Types matching backend schema
 type MiningResult = {
@@ -854,19 +855,25 @@ export default function MiningJobResultsPage() {
   const handleExportAll = async (format: 'xlsx' | 'csv' = 'xlsx') => {
     try {
       setExporting(true);
-      const response = await fetch(`/api/mining/jobs/${jobId}/results/export?format=${format}`, {
+      const response = await fetch(`${API_BASE}/api/mining/jobs/${jobId}/results/export?format=${format}`, {
         headers: getAuthHeaders() ?? {},
       });
-      if (!response.ok) throw new Error('Export failed');
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => '');
+        throw new Error(errBody || `Export failed (${response.status})`);
+      }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `mining-results-${jobId}.${format}`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Export error:', err);
+      alert(err instanceof Error ? err.message : 'Export failed');
     } finally {
       setExporting(false);
     }
