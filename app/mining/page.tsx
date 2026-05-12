@@ -261,6 +261,9 @@ interface AnalysisResult {
     js_heavy: boolean;
     login_required: boolean;
     blocked: boolean;
+    is_pdf?: boolean;
+    pdf_size_mb?: number;
+    pdf_too_large?: boolean;
   };
   badges: string[];
   warnings: string[];
@@ -294,6 +297,7 @@ function PreCheckModal({
   onCancel: () => void;
 }) {
   const isLow = analysis.mineability === "low";
+  const isPdfTooLarge = analysis.checks.pdf_too_large === true;
   const hostname = (() => { try { return new URL(url).hostname; } catch { return url; } })();
 
   return (
@@ -303,16 +307,20 @@ function PreCheckModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className={`px-5 py-4 ${isLow ? "bg-red-50 border-b border-red-100" : "bg-yellow-50 border-b border-yellow-100"}`}>
+        <div className={`px-5 py-4 ${isPdfTooLarge ? "bg-orange-50 border-b border-orange-100" : isLow ? "bg-red-50 border-b border-red-100" : "bg-yellow-50 border-b border-yellow-100"}`}>
           <div className="flex items-center gap-3">
-            {isLow ? (
+            {isPdfTooLarge ? (
+              <AlertTriangle className="w-6 h-6 text-orange-500 flex-shrink-0" />
+            ) : isLow ? (
               <ShieldAlert className="w-6 h-6 text-red-500 flex-shrink-0" />
             ) : (
               <Shield className="w-6 h-6 text-yellow-500 flex-shrink-0" />
             )}
             <div>
-              <h3 className={`font-semibold ${isLow ? "text-red-800" : "text-yellow-800"}`}>
-                {isLow ? "Low confidence — mining may not produce results" : "Medium confidence for this URL"}
+              <h3 className={`font-semibold ${isPdfTooLarge ? "text-orange-800" : isLow ? "text-red-800" : "text-yellow-800"}`}>
+                {isPdfTooLarge
+                  ? `PDF too large (${analysis.checks.pdf_size_mb} MB)`
+                  : isLow ? "Low confidence — mining may not produce results" : "Medium confidence for this URL"}
               </h3>
               <p className="text-xs text-gray-500 mt-0.5">{hostname}</p>
             </div>
@@ -321,61 +329,85 @@ function PreCheckModal({
 
         {/* Body */}
         <div className="px-5 py-4 space-y-3 max-h-80 overflow-y-auto">
-          {/* Score bar */}
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-500 w-12">Score</span>
-            <div className="flex-1 bg-gray-100 rounded-full h-2">
-              <div
-                className={`h-2 rounded-full transition-all ${
-                  analysis.score >= 60 ? "bg-green-500" : analysis.score >= 30 ? "bg-yellow-500" : "bg-red-500"
-                }`}
-                style={{ width: `${analysis.score}%` }}
-              />
-            </div>
-            <span className="text-xs font-bold text-gray-700 w-8 text-right">{analysis.score}</span>
-          </div>
+          {isPdfTooLarge ? (
+            <>
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 space-y-2">
+                <p className="text-sm text-orange-900 font-medium">
+                  This PDF is {analysis.checks.pdf_size_mb} MB — too large for URL mining (max 100 MB).
+                </p>
+                <p className="text-sm text-orange-800">
+                  The worker would timeout trying to download and process this file remotely.
+                </p>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1.5">
+                <p className="text-sm font-medium text-blue-900">What to do instead:</p>
+                <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                  <li>Download the PDF to your computer</li>
+                  <li>Go to the <strong>Jobs</strong> tab</li>
+                  <li>Click <strong>New Job</strong> and use <strong>File Upload</strong></li>
+                  <li>Upload the downloaded PDF (up to 1 GB supported)</li>
+                </ol>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Score bar */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500 w-12">Score</span>
+                <div className="flex-1 bg-gray-100 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full transition-all ${
+                      analysis.score >= 60 ? "bg-green-500" : analysis.score >= 30 ? "bg-yellow-500" : "bg-red-500"
+                    }`}
+                    style={{ width: `${analysis.score}%` }}
+                  />
+                </div>
+                <span className="text-xs font-bold text-gray-700 w-8 text-right">{analysis.score}</span>
+              </div>
 
-          {/* Badges (positive findings) */}
-          {analysis.badges.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">Found on page</p>
-              <ul className="space-y-1">
-                {analysis.badges.map((b, i) => (
-                  <li key={i} className="text-xs text-green-700 flex items-start gap-1.5">
-                    <CheckCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                    {b}
-                  </li>
-                ))}
-              </ul>
-            </div>
+              {/* Badges (positive findings) */}
+              {analysis.badges.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-1">Found on page</p>
+                  <ul className="space-y-1">
+                    {analysis.badges.map((b, i) => (
+                      <li key={i} className="text-xs text-green-700 flex items-start gap-1.5">
+                        <CheckCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                        {b}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Warnings */}
+              {analysis.warnings.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-1">Issues detected</p>
+                  <ul className="space-y-1">
+                    {analysis.warnings.map((w, i) => (
+                      <li key={i} className="text-xs text-red-700 flex items-start gap-1.5">
+                        <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                        {w}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Estimated contacts */}
+              {analysis.estimated_contacts > 0 && (
+                <p className="text-xs text-gray-600">
+                  Estimated contacts: <span className="font-semibold">~{analysis.estimated_contacts}</span>
+                </p>
+              )}
+
+              {/* Suggested miner */}
+              <p className="text-xs text-gray-400">
+                Suggested: {analysis.suggested_miner}
+              </p>
+            </>
           )}
-
-          {/* Warnings */}
-          {analysis.warnings.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">Issues detected</p>
-              <ul className="space-y-1">
-                {analysis.warnings.map((w, i) => (
-                  <li key={i} className="text-xs text-red-700 flex items-start gap-1.5">
-                    <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                    {w}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Estimated contacts */}
-          {analysis.estimated_contacts > 0 && (
-            <p className="text-xs text-gray-600">
-              Estimated contacts: <span className="font-semibold">~{analysis.estimated_contacts}</span>
-            </p>
-          )}
-
-          {/* Suggested miner */}
-          <p className="text-xs text-gray-400">
-            Suggested: {analysis.suggested_miner}
-          </p>
         </div>
 
         {/* Footer */}
@@ -385,22 +417,24 @@ function PreCheckModal({
             onClick={onCancel}
             className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-md hover:bg-gray-100 transition-colors"
           >
-            Cancel
+            {isPdfTooLarge ? "Close" : "Cancel"}
           </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className={`px-4 py-2 text-sm font-medium text-white rounded-md transition-colors ${
-              isLow
-                ? "bg-red-500 hover:bg-red-600"
-                : "bg-orange-500 hover:bg-orange-600"
-            }`}
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <Pickaxe className="w-3.5 h-3.5" />
-              Mine Anyway
-            </span>
-          </button>
+          {!isPdfTooLarge && (
+            <button
+              type="button"
+              onClick={onConfirm}
+              className={`px-4 py-2 text-sm font-medium text-white rounded-md transition-colors ${
+                isLow
+                  ? "bg-red-500 hover:bg-red-600"
+                  : "bg-orange-500 hover:bg-orange-600"
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Pickaxe className="w-3.5 h-3.5" />
+                Mine Anyway
+              </span>
+            </button>
+          )}
         </div>
       </div>
     </div>
