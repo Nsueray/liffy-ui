@@ -1967,6 +1967,16 @@ function NewJobModal({ onClose, onJobCreated }: { onClose: () => void; onJobCrea
       toast.error("Please select a file to upload");
       return;
     }
+    if (jobType === "file" && selectedFile) {
+      const fileSizeMB = selectedFile.size / 1024 / 1024;
+      if (fileSizeMB > 200) {
+        toast.error(
+          `File is too large (${Math.round(fileSizeMB)} MB). Maximum upload size is 200 MB. For larger files, split the PDF into smaller parts or use the Local Miner.`,
+          { duration: 8000 }
+        );
+        return;
+      }
+    }
 
     let parsedConfig: Record<string, unknown> | null = null;
     if (advancedConfig.trim()) {
