@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { loginUrlWithReturnTo } from "@/lib/authRedirect";
 import { Sidebar } from "@/components/sidebar"; // Import the new Sidebar
 import { Button } from "@/components/ui/button";
 import { 
@@ -29,7 +30,7 @@ type Props = {
 };
 
 // Decode JWT payload (base64url → JSON). Returns null on any failure.
-function decodeJwtPayload(token: string): { email?: string; role?: string; user_id?: string; organizer_id?: string } | null {
+function decodeJwtPayload(token: string): { email?: string; role?: string; user_id?: string; organizer_id?: string; exp?: number } | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
@@ -72,7 +73,7 @@ export function LayoutClient({ children }: Props) {
 
     const token = localStorage.getItem("liffy_token");
     if (!token) {
-      router.replace("/login");
+      router.replace(loginUrlWithReturnTo());
       return;
     }
 
@@ -82,7 +83,16 @@ export function LayoutClient({ children }: Props) {
     if (!payload || !payload.email) {
       localStorage.removeItem("liffy_token");
       localStorage.removeItem("liffy_user");
-      router.replace("/login");
+      router.replace(loginUrlWithReturnTo());
+      return;
+    }
+
+    // Expire stale tokens: if the JWT carries an exp claim and it has passed,
+    // clear it and force re-login. If there is no exp claim, keep prior behavior.
+    if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) {
+      localStorage.removeItem("liffy_token");
+      localStorage.removeItem("liffy_user");
+      router.replace(loginUrlWithReturnTo());
       return;
     }
 

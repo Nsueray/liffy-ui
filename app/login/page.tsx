@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { safeReturnTo } from "@/lib/authRedirect";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -59,8 +60,10 @@ export default function LoginPage() {
         localStorage.setItem("liffy_user", JSON.stringify(userInfo));
       }
 
-      // Başarılı login → Mining Jobs sayfasına yönlendir
-      window.location.href = "/mining/jobs";
+      // Başarılı login → returnTo varsa (ve güvenli iç path'se) oraya, yoksa Mining Jobs
+      const params = new URLSearchParams(window.location.search);
+      const dest = safeReturnTo(params.get("returnTo")) || "/mining/jobs";
+      window.location.href = dest;
     } catch (err) {
       console.error("Login error:", err);
       setError("Unexpected error while logging in");
