@@ -207,6 +207,9 @@ export default function PersonDetailPage() {
 
   // Delete
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteReasonError, setDeleteReasonError] = useState(false);
 
   // Unsubscribe
   const [isUnsubscribed, setIsUnsubscribed] = useState(false);
@@ -506,7 +509,11 @@ export default function PersonDetailPage() {
 
   const handleDelete = async () => {
     if (!detail) return;
-    if (!confirm(`Delete ${detail.person.email}? This will remove all affiliations, intents, and push history.`)) return;
+    const reason = deleteReason.trim();
+    if (!reason) {
+      setDeleteReasonError(true);
+      return;
+    }
 
     const token = getToken();
     if (!token) return;
@@ -515,7 +522,11 @@ export default function PersonDetailPage() {
     try {
       const res = await fetch(`${API_BASE}/api/persons/${personId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ reason })
       });
 
       if (!res.ok) {
@@ -529,6 +540,9 @@ export default function PersonDetailPage() {
       alert(msg);
     } finally {
       setDeleteLoading(false);
+      setDeleteConfirm(false);
+      setDeleteReason('');
+      setDeleteReasonError(false);
     }
   };
 
@@ -652,7 +666,7 @@ export default function PersonDetailPage() {
           <Button
             variant="destructive"
             size="sm"
-            onClick={handleDelete}
+            onClick={() => setDeleteConfirm(true)}
             disabled={deleteLoading}
           >
             {deleteLoading ? 'Deleting...' : 'Delete'}
@@ -1199,6 +1213,50 @@ export default function PersonDetailPage() {
         </Card>
       )}
       {/* Unsubscribe Confirmation Dialog */}
+      {deleteConfirm && detail && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold mb-2 text-red-700">Delete Contact</h3>
+            <p className="text-sm text-gray-600 mb-1">
+              Delete <strong>{detail.person.email}</strong>?
+            </p>
+            <p className="text-xs text-gray-500 mb-3">
+              This will remove all affiliations, intents, and history. This action cannot be undone.
+            </p>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Reason for deletion *</label>
+            <input
+              type="text"
+              className={`w-full border rounded px-3 py-2 text-sm mb-1 ${deleteReasonError ? 'border-red-400' : 'border-gray-300'}`}
+              placeholder="e.g. Duplicate record, test data..."
+              value={deleteReason}
+              onChange={(e) => { setDeleteReason(e.target.value); setDeleteReasonError(false); }}
+              autoFocus
+            />
+            {deleteReasonError && (
+              <p className="text-xs text-red-500 mb-2">Silme sebebi zorunlu</p>
+            )}
+            <div className="flex justify-end gap-2 mt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setDeleteConfirm(false); setDeleteReason(''); setDeleteReasonError(false); }}
+                disabled={deleteLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleteLoading}
+              >
+                {deleteLoading ? 'Deleting...' : 'Delete'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {unsubConfirm && detail && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
