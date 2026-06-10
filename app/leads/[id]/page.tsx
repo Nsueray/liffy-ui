@@ -765,15 +765,15 @@ export default function PersonDetailPage() {
               </div>
               {/* Owner display */}
               <div className="flex items-center gap-2 mt-2 text-sm text-gray-500">
-                <span>Sahip:</span>
+                <span>Owner:</span>
                 <span className="font-medium text-gray-700">
-                  {ownerName || 'Atanmamis'}
+                  {ownerName || 'Unassigned'}
                 </span>
                 <button
                   onClick={() => { setReassignOwner(person.sales_owner_user_id || ''); setReassignModal(true); }}
                   className="text-orange-600 hover:text-orange-700 text-xs font-medium ml-1"
                 >
-                  Degistir
+                  Change
                 </button>
               </div>
             </div>
@@ -1360,9 +1360,9 @@ export default function PersonDetailPage() {
       {reassignModal && detail && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
-            <h3 className="text-lg font-semibold mb-2">Sahip Degistir</h3>
+            <h3 className="text-lg font-semibold mb-2">Change Owner</h3>
             <p className="text-sm text-gray-600 mb-3">
-              <strong>{detail.person.email}</strong> icin yeni sahip sec:
+              Select new owner for <strong>{detail.person.email}</strong>:
             </p>
             {reassignError && <p className="text-xs text-red-600 mb-2">{reassignError}</p>}
             <select
@@ -1370,7 +1370,7 @@ export default function PersonDetailPage() {
               value={reassignOwner}
               onChange={e => setReassignOwner(e.target.value)}
             >
-              <option value="">-- Sec --</option>
+              <option value="">-- Select --</option>
               {assignableUsers.map(u => (
                 <option key={u.id} value={u.id}>
                   {[u.first_name, u.last_name].filter(Boolean).join(' ') || u.email} ({u.role})
@@ -1384,7 +1384,7 @@ export default function PersonDetailPage() {
                 onClick={() => { setReassignModal(false); setReassignError(null); }}
                 disabled={reassignLoading}
               >
-                Iptal
+                Cancel
               </Button>
               <Button
                 size="sm"
@@ -1392,7 +1392,7 @@ export default function PersonDetailPage() {
                 disabled={reassignLoading || !reassignOwner}
                 className="bg-orange-500 hover:bg-orange-600 text-white"
               >
-                {reassignLoading ? 'Kaydediliyor...' : 'Onayla'}
+                {reassignLoading ? 'Saving...' : 'Confirm'}
               </Button>
             </div>
           </div>

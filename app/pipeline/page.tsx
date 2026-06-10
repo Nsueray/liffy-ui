@@ -38,16 +38,16 @@ interface BoardResponse {
 }
 
 const LOST_REASONS: { value: string; label: string }[] = [
-  { value: 'company_defunct', label: 'Is kapanmis / faaliyette degil' },
-  { value: 'no_trade_fairs', label: 'Fuarlara katilmiyor' },
-  { value: 'bad_contact_info', label: 'Iletisim bilgisi hatali' },
-  { value: 'unreachable', label: 'Ulasilamadi' },
-  { value: 'not_interested', label: 'Ilgilenmiyor' },
-  { value: 'no_budget', label: 'Butce yetersiz' },
-  { value: 'competitor', label: 'Rakip fuara gidiyor' },
-  { value: 'wrong_profile', label: 'Yanlis sektor / profil' },
-  { value: 'bad_timing', label: 'Zamanlama uygun degil' },
-  { value: 'other', label: 'Diger' },
+  { value: 'company_defunct', label: 'Company defunct' },
+  { value: 'no_trade_fairs', label: "Doesn't attend trade fairs" },
+  { value: 'bad_contact_info', label: 'Invalid contact info' },
+  { value: 'unreachable', label: 'Unreachable' },
+  { value: 'not_interested', label: 'Not interested' },
+  { value: 'no_budget', label: 'Insufficient budget' },
+  { value: 'competitor', label: 'Competitor event' },
+  { value: 'wrong_profile', label: 'Wrong profile' },
+  { value: 'bad_timing', label: 'Bad timing' },
+  { value: 'other', label: 'Other' },
 ];
 
 const getActivityIcon = (type: string | null): string => {
@@ -353,9 +353,9 @@ export default function PipelinePage() {
       {lostModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">Eleme Sebebi</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Disqualification Reason</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Bu kisinin neden elendigini belirtin.
+              Specify why this contact was disqualified.
             </p>
 
             <select
@@ -366,7 +366,7 @@ export default function PipelinePage() {
               }}
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             >
-              <option value="">Sebep secin...</option>
+              <option value="">Select reason...</option>
               {LOST_REASONS.map(r => (
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}
@@ -376,7 +376,7 @@ export default function PipelinePage() {
               <textarea
                 value={lostNote}
                 onChange={(e) => setLostNote(e.target.value)}
-                placeholder="Aciklama yazin..."
+                placeholder="Provide details..."
                 rows={3}
                 className="mt-3 w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-none"
               />
@@ -389,7 +389,7 @@ export default function PipelinePage() {
                 onClick={handleLostCancel}
                 disabled={lostSubmitting}
               >
-                Iptal
+                Cancel
               </Button>
               <Button
                 size="sm"
@@ -397,7 +397,7 @@ export default function PipelinePage() {
                 disabled={!canConfirmLost || lostSubmitting}
                 className="bg-red-600 hover:bg-red-700 text-white"
               >
-                {lostSubmitting ? 'Kaydediliyor...' : 'Onayla'}
+                {lostSubmitting ? 'Saving...' : 'Confirm'}
               </Button>
             </div>
           </div>

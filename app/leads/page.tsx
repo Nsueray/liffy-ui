@@ -428,11 +428,18 @@ export default function ContactsPage() {
         <div className="flex items-center gap-2">
           <Button
             size="sm"
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              try {
+                const u = JSON.parse(localStorage.getItem('liffy_user') || '{}');
+                if (u.user_id) setCreateOwner(u.user_id);
+              } catch {}
+              setShowCreateModal(true);
+            }}
             className="bg-orange-500 hover:bg-orange-600 text-white"
           >
             <Plus className="h-4 w-4 mr-1" />
-            Kisi Ekle
+            Add Contact
+
           </Button>
           <Button
             variant="outline"
@@ -769,11 +776,12 @@ export default function ContactsPage() {
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Kisi Ekle</h3>
+            <h3 className="text-lg font-semibold mb-4">Add Contact</h3>
             {createError && <p className="text-xs text-red-600 mb-2">{createError}</p>}
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+
                 <input
                   type="email"
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -784,7 +792,7 @@ export default function ContactsPage() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Ad</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
                   <input
                     type="text"
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -793,7 +801,7 @@ export default function ContactsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Soyad</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
                   <input
                     type="text"
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -803,13 +811,13 @@ export default function ContactsPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Sahip</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Owner</label>
                 <select
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                   value={createOwner}
                   onChange={e => setCreateOwner(e.target.value)}
                 >
-                  <option value="">-- Atanmamis --</option>
+                  <option value="">-- Unassigned --</option>
                   {assignableUsers.map(u => (
                     <option key={u.id} value={u.id}>
                       {[u.first_name, u.last_name].filter(Boolean).join(' ') || u.email} ({u.role})
@@ -825,7 +833,7 @@ export default function ContactsPage() {
                 onClick={() => { setShowCreateModal(false); setCreateError(null); }}
                 disabled={createLoading}
               >
-                Iptal
+                Cancel
               </Button>
               <Button
                 size="sm"
@@ -833,7 +841,7 @@ export default function ContactsPage() {
                 disabled={createLoading || !createEmail.trim()}
                 className="bg-orange-500 hover:bg-orange-600 text-white"
               >
-                {createLoading ? 'Kaydediliyor...' : 'Kaydet'}
+                {createLoading ? 'Saving...' : 'Save'}
               </Button>
             </div>
           </div>
