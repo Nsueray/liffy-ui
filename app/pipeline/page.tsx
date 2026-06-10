@@ -37,6 +37,19 @@ interface BoardResponse {
   total_people: number;
 }
 
+const LOST_REASONS: { value: string; label: string }[] = [
+  { value: 'company_defunct', label: 'Is kapanmis / faaliyette degil' },
+  { value: 'no_trade_fairs', label: 'Fuarlara katilmiyor' },
+  { value: 'bad_contact_info', label: 'Iletisim bilgisi hatali' },
+  { value: 'unreachable', label: 'Ulasilamadi' },
+  { value: 'not_interested', label: 'Ilgilenmiyor' },
+  { value: 'no_budget', label: 'Butce yetersiz' },
+  { value: 'competitor', label: 'Rakip fuara gidiyor' },
+  { value: 'wrong_profile', label: 'Yanlis sektor / profil' },
+  { value: 'bad_timing', label: 'Zamanlama uygun degil' },
+  { value: 'other', label: 'Diger' },
+];
+
 const getActivityIcon = (type: string | null): string => {
   if (!type) return '';
   switch (type) {
@@ -84,6 +97,12 @@ export default function PipelinePage() {
   const [error, setError] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
 
+  // Lost reason modal state
+  const [lostModal, setLostModal] = useState<{ personId: string; stageId: string } | null>(null);
+  const [lostReason, setLostReason] = useState('');
+  const [lostNote, setLostNote] = useState('');
+  const [lostSubmitting, setLostSubmitting] = useState(false);
+
   const getToken = () => localStorage.getItem('liffy_token');
 
   const fetchBoard = useCallback(async () => {
@@ -112,15 +131,18 @@ export default function PipelinePage() {
     fetchBoard();
   }, [fetchBoard]);
 
-  const handleMoveStage = async (personId: string, stageId: string) => {
+  const doMoveStage = async (personId: string, stageId: string, reason?: string, reasonNote?: string) => {
     const token = getToken();
     if (!token) return;
     setMovingId(personId);
     try {
+      const body: Record<string, string> = { stage_id: stageId };
+      if (reason) body.reason = reason;
+      if (reasonNote) body.reason_note = reasonNote;
       const res = await fetch(`${API_BASE}/api/persons/${personId}/stage`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ stage_id: stageId }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -134,12 +156,45 @@ export default function PipelinePage() {
     }
   };
 
+  const handleMoveStage = (personId: string, stageId: string) => {
+    const targetStage = stages.find(s => s.id === stageId);
+    if (targetStage?.is_lost) {
+      setLostReason('');
+      setLostNote('');
+      setLostModal({ personId, stageId });
+      return;
+    }
+    doMoveStage(personId, stageId);
+  };
+
+  const handleLostConfirm = async () => {
+    if (!lostModal || !lostReason) return;
+    if (lostReason === 'other' && !lostNote.trim()) return;
+    setLostSubmitting(true);
+    await doMoveStage(
+      lostModal.personId,
+      lostModal.stageId,
+      lostReason,
+      lostReason === 'other' ? lostNote.trim() : undefined,
+    );
+    setLostSubmitting(false);
+    setLostModal(null);
+  };
+
+  const handleLostCancel = () => {
+    setLostModal(null);
+    setLostReason('');
+    setLostNote('');
+  };
+
   // Summary counts
   const stages = board?.stages || [];
   const totalPeople = board?.total_people || 0;
   const wonCount = stages.filter(s => s.is_won).reduce((sum, s) => sum + s.count, 0);
   const lostCount = stages.filter(s => s.is_lost).reduce((sum, s) => sum + s.count, 0);
   const activeCount = totalPeople - wonCount - lostCount;
+
+  const canConfirmLost = lostReason && (lostReason !== 'other' || lostNote.trim());
 
   return (
     <div className="p-6 space-y-6">
@@ -290,6 +345,61 @@ export default function PipelinePage() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Lost Reason Modal */}
+      {lostModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Eleme Sebebi</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Bu kisinin neden elendigini belirtin.
+            </p>
+
+            <select
+              value={lostReason}
+              onChange={(e) => {
+                setLostReason(e.target.value);
+                if (e.target.value !== 'other') setLostNote('');
+              }}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="">Sebep secin...</option>
+              {LOST_REASONS.map(r => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+
+            {lostReason === 'other' && (
+              <textarea
+                value={lostNote}
+                onChange={(e) => setLostNote(e.target.value)}
+                placeholder="Aciklama yazin..."
+                rows={3}
+                className="mt-3 w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-none"
+              />
+            )}
+
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLostCancel}
+                disabled={lostSubmitting}
+              >
+                Iptal
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleLostConfirm}
+                disabled={!canConfirmLost || lostSubmitting}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {lostSubmitting ? 'Kaydediliyor...' : 'Onayla'}
+              </Button>
+            </div>
           </div>
         </div>
       )}
