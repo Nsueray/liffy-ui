@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Download, X, Building2 } from 'lucide-react';
+import { Download, X, Building2, Plus } from 'lucide-react';
 
 interface Person {
   id: string;
@@ -89,6 +89,14 @@ interface ZohoPush {
   pushed_at: string;
 }
 
+interface AssignableUser {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  role: string;
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.liffy.app';
 
 const VERIFICATION_STATUSES = [
@@ -132,7 +140,31 @@ export default function ContactsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  // Create modal
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createEmail, setCreateEmail] = useState('');
+  const [createFirstName, setCreateFirstName] = useState('');
+  const [createLastName, setCreateLastName] = useState('');
+  const [createOwner, setCreateOwner] = useState('');
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  // Assignable users (owner dropdown)
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+
   const getToken = () => localStorage.getItem('liffy_token');
+
+  // Fetch assignable users once
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    fetch(`${API_BASE}/api/users/assignable`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.ok ? res.json() : { users: [] })
+      .then(data => setAssignableUsers(data.users || []))
+      .catch(() => setAssignableUsers([]));
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
@@ -347,6 +379,40 @@ export default function ContactsPage() {
     }
   };
 
+  const handleCreate = async () => {
+    if (!createEmail.trim()) return;
+    const token = getToken();
+    if (!token) return;
+    setCreateLoading(true);
+    setCreateError(null);
+    try {
+      const body: Record<string, string> = { email: createEmail.trim() };
+      if (createFirstName.trim()) body.first_name = createFirstName.trim();
+      if (createLastName.trim()) body.last_name = createLastName.trim();
+      if (createOwner) body.sales_owner_user_id = createOwner;
+      const res = await fetch(`${API_BASE}/api/persons`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setShowCreateModal(false);
+      setCreateEmail('');
+      setCreateFirstName('');
+      setCreateLastName('');
+      setCreateOwner('');
+      fetchPersons();
+      fetchStats();
+    } catch (e: unknown) {
+      setCreateError(e instanceof Error ? e.message : 'Failed to create contact');
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
   const startRecord = total > 0 ? (page - 1) * limit + 1 : 0;
   const endRecord = Math.min(page * limit, total);
 
@@ -359,15 +425,25 @@ export default function ContactsPage() {
             {loading ? 'Loading...' : `${total.toLocaleString()} total contacts`}
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => handleExportAll('xlsx')}
-          disabled={exporting || total === 0}
-        >
-          <Download className="h-4 w-4 mr-1" />
-          {exporting ? 'Exporting...' : `Export All (${total.toLocaleString()})`}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => setShowCreateModal(true)}
+            className="bg-orange-500 hover:bg-orange-600 text-white"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Kisi Ekle
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExportAll('xlsx')}
+            disabled={exporting || total === 0}
+          >
+            <Download className="h-4 w-4 mr-1" />
+            {exporting ? 'Exporting...' : `Export All (${total.toLocaleString()})`}
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -687,6 +763,81 @@ export default function ContactsPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* Create Contact Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Kisi Ekle</h3>
+            {createError && <p className="text-xs text-red-600 mb-2">{createError}</p>}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input
+                  type="email"
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  value={createEmail}
+                  onChange={e => setCreateEmail(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ad</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    value={createFirstName}
+                    onChange={e => setCreateFirstName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Soyad</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    value={createLastName}
+                    onChange={e => setCreateLastName(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sahip</label>
+                <select
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  value={createOwner}
+                  onChange={e => setCreateOwner(e.target.value)}
+                >
+                  <option value="">-- Atanmamis --</option>
+                  {assignableUsers.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {[u.first_name, u.last_name].filter(Boolean).join(' ') || u.email} ({u.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setShowCreateModal(false); setCreateError(null); }}
+                disabled={createLoading}
+              >
+                Iptal
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleCreate}
+                disabled={createLoading || !createEmail.trim()}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                {createLoading ? 'Kaydediliyor...' : 'Kaydet'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Person Detail Slide-over */}

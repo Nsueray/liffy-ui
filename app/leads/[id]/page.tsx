@@ -11,6 +11,14 @@ import { cn } from '@/lib/utils';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.liffy.app';
 
+interface AssignableUser {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  role: string;
+}
+
 interface PersonData {
   id: string;
   email: string;
@@ -20,6 +28,7 @@ interface PersonData {
   verified_at: string | null;
   created_at: string;
   updated_at: string;
+  sales_owner_user_id: string | null;
 }
 
 interface Affiliation {
@@ -237,7 +246,26 @@ export default function PersonDetailPage() {
   const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'normal' | 'high'>('normal');
   const [tasksError, setTasksError] = useState<string | null>(null);
 
+  // Assignable users + reassign
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+  const [reassignModal, setReassignModal] = useState(false);
+  const [reassignOwner, setReassignOwner] = useState('');
+  const [reassignLoading, setReassignLoading] = useState(false);
+  const [reassignError, setReassignError] = useState<string | null>(null);
+
   const getToken = () => localStorage.getItem('liffy_token');
+
+  // Fetch assignable users once
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    fetch(`${API_BASE}/api/users/assignable`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.ok ? res.json() : { users: [] })
+      .then(data => setAssignableUsers(data.users || []))
+      .catch(() => setAssignableUsers([]));
+  }, []);
 
   const fetchDetail = useCallback(async () => {
     const token = getToken();
@@ -577,6 +605,37 @@ export default function PersonDetailPage() {
     }
   };
 
+  const handleReassign = async () => {
+    if (!reassignOwner) return;
+    const token = getToken();
+    if (!token) return;
+    setReassignLoading(true);
+    setReassignError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/persons/${personId}/owner`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ new_owner_user_id: reassignOwner }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setReassignModal(false);
+      setReassignOwner('');
+      fetchDetail();
+    } catch (e: unknown) {
+      setReassignError(e instanceof Error ? e.message : 'Reassign failed');
+    } finally {
+      setReassignLoading(false);
+    }
+  };
+
+  const ownerUser = assignableUsers.find(u => u.id === detail?.person.sales_owner_user_id);
+  const ownerName = ownerUser
+    ? ([ownerUser.first_name, ownerUser.last_name].filter(Boolean).join(' ') || ownerUser.email)
+    : null;
+
   const formatName = (p: PersonData) => {
     const parts = [p.first_name, p.last_name].filter(Boolean);
     return parts.length > 0 ? parts.join(' ') : null;
@@ -703,6 +762,19 @@ export default function PersonDetailPage() {
                     Synced to Zoho
                   </Badge>
                 )}
+              </div>
+              {/* Owner display */}
+              <div className="flex items-center gap-2 mt-2 text-sm text-gray-500">
+                <span>Sahip:</span>
+                <span className="font-medium text-gray-700">
+                  {ownerName || 'Atanmamis'}
+                </span>
+                <button
+                  onClick={() => { setReassignOwner(person.sales_owner_user_id || ''); setReassignModal(true); }}
+                  className="text-orange-600 hover:text-orange-700 text-xs font-medium ml-1"
+                >
+                  Degistir
+                </button>
               </div>
             </div>
           </div>
@@ -1278,6 +1350,49 @@ export default function PersonDetailPage() {
                 className="bg-orange-600 hover:bg-orange-700 text-white"
               >
                 {unsubLoading ? 'Processing...' : 'Confirm Unsubscribe'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reassign Owner Modal */}
+      {reassignModal && detail && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold mb-2">Sahip Degistir</h3>
+            <p className="text-sm text-gray-600 mb-3">
+              <strong>{detail.person.email}</strong> icin yeni sahip sec:
+            </p>
+            {reassignError && <p className="text-xs text-red-600 mb-2">{reassignError}</p>}
+            <select
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 mb-4"
+              value={reassignOwner}
+              onChange={e => setReassignOwner(e.target.value)}
+            >
+              <option value="">-- Sec --</option>
+              {assignableUsers.map(u => (
+                <option key={u.id} value={u.id}>
+                  {[u.first_name, u.last_name].filter(Boolean).join(' ') || u.email} ({u.role})
+                </option>
+              ))}
+            </select>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setReassignModal(false); setReassignError(null); }}
+                disabled={reassignLoading}
+              >
+                Iptal
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleReassign}
+                disabled={reassignLoading || !reassignOwner}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                {reassignLoading ? 'Kaydediliyor...' : 'Onayla'}
               </Button>
             </div>
           </div>
