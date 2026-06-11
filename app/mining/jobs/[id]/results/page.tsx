@@ -28,9 +28,11 @@ import {
   Upload,
   Zap,
   AlertTriangle,
+  Users,
 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import OwnerSelect, { type AssignableUser } from "@/components/OwnerSelect";
 
 const isDev = process.env.NODE_ENV !== "production";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.liffy.app";
@@ -258,6 +260,17 @@ export default function MiningJobResultsPage() {
     completed_at?: string;
   } | null>(null);
 
+  // Assign All state
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignOwner, setAssignOwner] = useState("");
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [assignResult, setAssignResult] = useState<{
+    updated_count: number;
+    skipped: Array<{ id: string; reason: string }>;
+    error?: string;
+  } | null>(null);
+
   // Filters
   const [search, setSearch] = useState("");
   const [emailFilter, setEmailFilter] = useState<"all" | "with" | "without">(
@@ -426,6 +439,16 @@ export default function MiningJobResultsPage() {
       })
       .catch(() => {});
   }, [jobId]);
+
+  // Fetch assignable users for Assign All
+  useEffect(() => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
+    fetch(`${API_BASE}/api/users/assignable`, { headers })
+      .then(res => res.ok ? res.json() : { users: [] })
+      .then(data => setAssignableUsers(data.users || []))
+      .catch(() => setAssignableUsers([]));
+  }, []);
 
   useEffect(() => {
     setPage(1);
@@ -850,6 +873,71 @@ export default function MiningJobResultsPage() {
     }
   };
 
+  // Assign All: fetch persons from this job, then bulk-owner
+  const handleAssignAll = async () => {
+    if (!assignOwner || !jobId) return;
+    const headers = getAuthHeaders();
+    if (!headers) return;
+    setAssignLoading(true);
+    setAssignResult(null);
+    try {
+      // Paginate through ALL persons linked to this mining job
+      const PAGE_SIZE = 500;
+      const allPersonIds: string[] = [];
+      let currentPage = 1;
+      let totalPersons = 0;
+
+      do {
+        const personsRes = await fetch(
+          `${API_BASE}/api/persons?mining_job_id=${jobId}&limit=${PAGE_SIZE}&page=${currentPage}`,
+          { headers }
+        );
+        if (!personsRes.ok) {
+          throw new Error(`Failed to fetch contacts (page ${currentPage}, HTTP ${personsRes.status})`);
+        }
+        const personsData = await personsRes.json();
+        const pageIds = (personsData.persons || []).map((p: { id: string }) => p.id);
+        allPersonIds.push(...pageIds);
+
+        if (currentPage === 1) {
+          totalPersons = personsData.total || pageIds.length;
+        }
+        currentPage++;
+      } while (allPersonIds.length < totalPersons);
+
+      if (allPersonIds.length === 0) {
+        setAssignResult({ updated_count: 0, skipped: [], error: "no_persons" });
+        return;
+      }
+
+      // Single bulk assign with all collected IDs
+      const res = await fetch(`${API_BASE}/api/persons/bulk-owner`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ person_ids: allPersonIds, new_owner_user_id: assignOwner }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setAssignResult({ updated_count: data.updated_count, skipped: data.skipped || [] });
+    } catch (e: unknown) {
+      setAssignResult({
+        updated_count: 0,
+        skipped: [{ id: "-", reason: e instanceof Error ? e.message : "Request failed" }],
+      });
+    } finally {
+      setAssignLoading(false);
+    }
+  };
+
+  const closeAssignModal = () => {
+    setShowAssignModal(false);
+    setAssignOwner("");
+    setAssignResult(null);
+  };
+
   const [exporting, setExporting] = useState(false);
 
   const handleExportAll = async (format: 'xlsx' | 'csv' = 'xlsx') => {
@@ -1078,6 +1166,15 @@ export default function MiningJobResultsPage() {
           >
             <UserPlus className="h-4 w-4 mr-1 inline" />
             Import Selected ({selectedIds.length})
+          </button>
+
+          {/* Assign All to Owner */}
+          <button
+            onClick={() => { setAssignOwner(""); setAssignResult(null); setShowAssignModal(true); }}
+            className="px-4 py-1.5 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700"
+          >
+            <Users className="h-4 w-4 mr-1 inline" />
+            Assign All to...
           </button>
         </div>
       </div>
@@ -1686,6 +1783,89 @@ export default function MiningJobResultsPage() {
                 }
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign All Modal */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold mb-1">Assign All to Owner</h3>
+            <p className="text-sm text-gray-500 mb-3">
+              Assign all contacts from this mining job to a team member.
+            </p>
+            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2 mb-4">
+              Only contacts already written to the database (imported or auto-persisted) are included.
+              Mining jobs created before this feature will show 0 contacts.
+            </p>
+
+            {!assignResult ? (
+              <>
+                <OwnerSelect
+                  users={assignableUsers}
+                  value={assignOwner}
+                  onChange={setAssignOwner}
+                  showUnassigned={false}
+                  disabled={assignLoading}
+                />
+                <div className="flex justify-end gap-2 mt-4">
+                  <button
+                    onClick={closeAssignModal}
+                    disabled={assignLoading}
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAssignAll}
+                    disabled={assignLoading || !assignOwner}
+                    className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded text-sm disabled:opacity-50"
+                  >
+                    {assignLoading ? "Assigning..." : "Confirm"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2 text-sm">
+                  {assignResult.error === "no_persons" ? (
+                    <p className="text-amber-700">
+                      No contacts found for this mining job. They may not have been imported yet,
+                      or this job was created before the tracking feature was enabled.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="font-medium text-green-700">
+                        {assignResult.updated_count} contact{assignResult.updated_count !== 1 ? "s" : ""} assigned.
+                      </p>
+                      {assignResult.skipped.length > 0 && (
+                        <div className="bg-amber-50 border border-amber-200 rounded p-3">
+                          <p className="font-medium text-amber-800 mb-1">
+                            {assignResult.skipped.length} skipped:
+                          </p>
+                          <ul className="text-xs text-amber-700 space-y-0.5">
+                            {assignResult.skipped.map((s, i) => (
+                              <li key={i}>
+                                {s.reason === "no_access" ? "No permission" : s.reason === "not_found" ? "Not found" : s.reason}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+                <div className="flex justify-end mt-4">
+                  <button
+                    onClick={closeAssignModal}
+                    className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded text-sm"
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
