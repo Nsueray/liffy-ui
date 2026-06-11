@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Download, X, Building2, Plus } from 'lucide-react';
+import { Download, X, Building2, Plus, Users } from 'lucide-react';
+import OwnerSelect from '@/components/OwnerSelect';
 
 interface Person {
   id: string;
@@ -151,6 +152,16 @@ export default function ContactsPage() {
 
   // Assignable users (owner dropdown)
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+
+  // Bulk selection + assign
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAssignModal, setBulkAssignModal] = useState(false);
+  const [bulkAssignOwner, setBulkAssignOwner] = useState('');
+  const [bulkAssignLoading, setBulkAssignLoading] = useState(false);
+  const [bulkAssignResult, setBulkAssignResult] = useState<{
+    updated_count: number;
+    skipped: Array<{ id: string; reason: string }>;
+  } | null>(null);
 
   const getToken = () => localStorage.getItem('liffy_token');
 
@@ -377,6 +388,66 @@ export default function ContactsPage() {
     } finally {
       setExporting(false);
     }
+  };
+
+  // Clear selection when page/filters change
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, debouncedSearch, verificationStatus, country, company, industry]);
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === persons.length && persons.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(persons.map(p => p.id)));
+    }
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkAssign = async () => {
+    if (!bulkAssignOwner || selectedIds.size === 0) return;
+    const token = getToken();
+    if (!token) return;
+    setBulkAssignLoading(true);
+    setBulkAssignResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/persons/bulk-owner`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          person_ids: Array.from(selectedIds),
+          new_owner_user_id: bulkAssignOwner,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setBulkAssignResult({ updated_count: data.updated_count, skipped: data.skipped || [] });
+    } catch (e: unknown) {
+      setBulkAssignResult({ updated_count: 0, skipped: [{ id: '-', reason: e instanceof Error ? e.message : 'Request failed' }] });
+    } finally {
+      setBulkAssignLoading(false);
+    }
+  };
+
+  const closeBulkAssignModal = () => {
+    setBulkAssignModal(false);
+    setBulkAssignOwner('');
+    if (bulkAssignResult && bulkAssignResult.updated_count > 0) {
+      setSelectedIds(new Set());
+      fetchPersons();
+    }
+    setBulkAssignResult(null);
   };
 
   const handleCreate = async () => {
@@ -632,6 +703,30 @@ export default function ContactsPage() {
         </div>
       )}
 
+      {/* Bulk selection toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-orange-50 border border-orange-200 rounded-lg">
+          <span className="text-sm font-medium text-orange-800">
+            {selectedIds.size} selected
+          </span>
+          <Button
+            size="sm"
+            onClick={() => { setBulkAssignOwner(''); setBulkAssignResult(null); setBulkAssignModal(true); }}
+            className="bg-orange-500 hover:bg-orange-600 text-white"
+          >
+            <Users className="h-4 w-4 mr-1" />
+            Assign Owner
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <Card className="border-red-200 bg-red-50">
@@ -691,6 +786,14 @@ export default function ContactsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size === persons.length && persons.length > 0}
+                      onChange={toggleSelectAll}
+                      className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                    />
+                  </TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Company</TableHead>
@@ -710,6 +813,14 @@ export default function ContactsPage() {
                       className="cursor-pointer hover:bg-orange-50/50"
                       onClick={() => router.push(`/leads/${person.id}`)}
                     >
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(person.id)}
+                          onChange={() => toggleSelectOne(person.id)}
+                          className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           {name || <span className="text-muted-foreground">-</span>}
@@ -844,6 +955,80 @@ export default function ContactsPage() {
                 {createLoading ? 'Saving...' : 'Save'}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Assign Owner Modal */}
+      {bulkAssignModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold mb-1">Assign Owner</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Assign {selectedIds.size} contact{selectedIds.size !== 1 ? 's' : ''} to a team member.
+            </p>
+
+            {!bulkAssignResult ? (
+              <>
+                <OwnerSelect
+                  users={assignableUsers}
+                  value={bulkAssignOwner}
+                  onChange={setBulkAssignOwner}
+                  showUnassigned={false}
+                  disabled={bulkAssignLoading}
+                />
+                <div className="flex justify-end gap-2 mt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={closeBulkAssignModal}
+                    disabled={bulkAssignLoading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleBulkAssign}
+                    disabled={bulkAssignLoading || !bulkAssignOwner}
+                    className="bg-orange-500 hover:bg-orange-600 text-white"
+                  >
+                    {bulkAssignLoading ? 'Assigning...' : 'Confirm'}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2 text-sm">
+                  <p className="font-medium text-green-700">
+                    {bulkAssignResult.updated_count} contact{bulkAssignResult.updated_count !== 1 ? 's' : ''} assigned.
+                  </p>
+                  {bulkAssignResult.skipped.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded p-3">
+                      <p className="font-medium text-amber-800 mb-1">
+                        {bulkAssignResult.skipped.length} skipped:
+                      </p>
+                      <ul className="text-xs text-amber-700 space-y-0.5">
+                        {bulkAssignResult.skipped.map((s, i) => (
+                          <li key={i}>
+                            {s.reason === 'no_access' ? 'No permission' : s.reason === 'not_found' ? 'Not found' : s.reason}
+                            {s.id !== '-' && <span className="text-amber-500 ml-1">({s.id.slice(0, 8)}...)</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-end mt-4">
+                  <Button
+                    size="sm"
+                    onClick={closeBulkAssignModal}
+                    className="bg-orange-500 hover:bg-orange-600 text-white"
+                  >
+                    Done
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
