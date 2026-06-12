@@ -59,6 +59,7 @@ interface Quote {
   person_email?: string;
   owner_first_name?: string;
   owner_last_name?: string;
+  owner_email?: string;
   line_items: LineItem[];
   totals: Totals;
   expo?: { name: string; payment_deadline: string };
@@ -121,6 +122,13 @@ function statusLabel(s: string, expired?: boolean) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+function ownerLabel(first?: string, last?: string, email?: string) {
+  const name = [first, last].filter(Boolean).join(' ');
+  if (name) return name;
+  if (email) return email.split('@')[0];
+  return '—';
+}
+
 function calcLineTotal(li: { quantity: number; unit_price: number; discount_percent: number; tax_percent: number }) {
   const sub = li.quantity * li.unit_price;
   const afterDisc = sub * (1 - li.discount_percent / 100);
@@ -172,6 +180,8 @@ export default function QuotesPage() {
   const [saving, setSaving] = useState(false);
 
   // Dialogs
+  const [sendDialog, setSendDialog] = useState(false);
+  const [declineDialog, setDeclineDialog] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deleteReason, setDeleteReason] = useState('');
   const [signDialog, setSignDialog] = useState(false);
@@ -359,8 +369,7 @@ export default function QuotesPage() {
         const res = await fetch(`${API_BASE}/api/quotes`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
         if (!res.ok) { const e = await res.json(); alert(e.error || 'Failed'); setSaving(false); return; }
         const created = await res.json();
-        setSelectedQuote(created);
-        setView('detail');
+        await openDetail(created.id);
         fetchQuotes();
       } else if (selectedQuote) {
         // Update quote header
@@ -391,17 +400,17 @@ export default function QuotesPage() {
   // Status transitions
   const handleSend = async () => {
     if (!selectedQuote) return;
-    if (!confirm('Mark this quote as Sent? Subject and line items will be locked.')) return;
     const res = await fetch(`${API_BASE}/api/quotes/${selectedQuote.id}/send`, { method: 'POST', headers: authHeaders() });
-    if (!res.ok) { const e = await res.json(); alert(e.error); return; }
+    if (!res.ok) { const e = await res.json(); alert(e.error); setSendDialog(false); return; }
+    setSendDialog(false);
     await openDetail(selectedQuote.id); fetchQuotes();
   };
 
   const handleDecline = async () => {
     if (!selectedQuote) return;
-    if (!confirm('Mark this quote as Declined?')) return;
     const res = await fetch(`${API_BASE}/api/quotes/${selectedQuote.id}/decline`, { method: 'POST', headers: authHeaders() });
-    if (!res.ok) { const e = await res.json(); alert(e.error); return; }
+    if (!res.ok) { const e = await res.json(); alert(e.error); setDeclineDialog(false); return; }
+    setDeclineDialog(false);
     await openDetail(selectedQuote.id); fetchQuotes();
   };
 
@@ -499,7 +508,7 @@ export default function QuotesPage() {
                   <TableCell className="text-right font-mono">{fmtMoney(q.totals.grand_total, q.currency)}</TableCell>
                   <TableCell className="text-right font-mono text-gray-500">{fmtMoney(q.totals.grand_total_eur, 'EUR')}</TableCell>
                   <TableCell>{fmtDate(q.valid_until)}</TableCell>
-                  <TableCell className="text-sm">{[q.owner_first_name, q.owner_last_name].filter(Boolean).join(' ') || '—'}</TableCell>
+                  <TableCell className="text-sm">{ownerLabel(q.owner_first_name, q.owner_last_name, q.owner_email)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -536,14 +545,14 @@ export default function QuotesPage() {
           {isDraft && (
             <>
               <Button size="sm" variant="outline" onClick={openEdit}><Edit className="h-4 w-4 mr-1" /> Edit</Button>
-              <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white" onClick={handleSend}><Send className="h-4 w-4 mr-1" /> Send</Button>
+              <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white" onClick={() => setSendDialog(true)}><Send className="h-4 w-4 mr-1" /> Send</Button>
               <Button size="sm" variant="destructive" onClick={() => setDeleteDialog(true)}><Trash2 className="h-4 w-4 mr-1" /> Delete</Button>
             </>
           )}
           {isSent && (
             <>
               <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => setSignDialog(true)}><CheckCircle className="h-4 w-4 mr-1" /> Sign</Button>
-              <Button size="sm" variant="destructive" onClick={handleDecline}><XCircle className="h-4 w-4 mr-1" /> Decline</Button>
+              <Button size="sm" variant="destructive" onClick={() => setDeclineDialog(true)}><XCircle className="h-4 w-4 mr-1" /> Decline</Button>
             </>
           )}
         </div>
@@ -557,7 +566,7 @@ export default function QuotesPage() {
           <Card><CardContent className="p-4"><div className="text-xs text-gray-500">Office</div><div className="font-medium mt-1">{q.office_code}</div></CardContent></Card>
           <Card><CardContent className="p-4"><div className="text-xs text-gray-500">Currency / Rate</div><div className="font-medium mt-1">{q.currency} (1 {q.currency} = {Number(q.exchange_rate_to_eur).toFixed(6)} EUR)</div></CardContent></Card>
           <Card><CardContent className="p-4"><div className="text-xs text-gray-500">Valid Until</div><div className={`font-medium mt-1 ${q.is_expired ? 'text-red-600' : ''}`}>{fmtDate(q.valid_until)}{q.is_expired ? ' (Expired)' : ''}</div></CardContent></Card>
-          <Card><CardContent className="p-4"><div className="text-xs text-gray-500">Owner</div><div className="font-medium mt-1">{q.sales_owner ? `${q.sales_owner.first_name || ''} ${q.sales_owner.last_name || ''}`.trim() : '—'}</div></CardContent></Card>
+          <Card><CardContent className="p-4"><div className="text-xs text-gray-500">Owner</div><div className="font-medium mt-1">{q.sales_owner ? ownerLabel(q.sales_owner.first_name, q.sales_owner.last_name, q.sales_owner.email) : '—'}</div></CardContent></Card>
           {q.signed_scan_url && (
             <Card><CardContent className="p-4"><div className="text-xs text-gray-500">Signed Scan</div><a href={q.signed_scan_url} target="_blank" rel="noreferrer" className="text-blue-600 underline mt-1 block truncate">{q.signed_scan_url}</a></CardContent></Card>
           )}
@@ -611,6 +620,38 @@ export default function QuotesPage() {
             {q.totals.total_m2 > 0 && <div className="flex justify-between text-gray-500"><span>Total m²</span><span className="font-mono">{q.totals.total_m2} SQM</span></div>}
           </div>
         </div>
+
+        {/* Send dialog */}
+        {sendDialog && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <Card className="w-96">
+              <CardContent className="p-6 space-y-4">
+                <h3 className="font-semibold">Send Quote {q.af_number}?</h3>
+                <p className="text-sm text-gray-500">Subject and line items will be locked after sending. This cannot be undone.</p>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setSendDialog(false)}>Cancel</Button>
+                  <Button className="bg-blue-500 hover:bg-blue-600 text-white" onClick={handleSend}>Send</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Decline dialog */}
+        {declineDialog && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <Card className="w-96">
+              <CardContent className="p-6 space-y-4">
+                <h3 className="font-semibold">Decline Quote {q.af_number}?</h3>
+                <p className="text-sm text-gray-500">This will mark the quote as declined.</p>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setDeclineDialog(false)}>Cancel</Button>
+                  <Button variant="destructive" onClick={handleDecline}>Decline</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Delete dialog */}
         {deleteDialog && (
