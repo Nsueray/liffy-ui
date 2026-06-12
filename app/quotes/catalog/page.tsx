@@ -141,7 +141,7 @@ export default function CatalogPage() {
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <Link href="/quotes"><Button variant="ghost" size="sm"><ChevronLeft className="h-4 w-4 mr-1" /> Quotes</Button></Link>
-        <h2 className="text-2xl font-semibold">Catalog & Reference Data</h2>
+        <h2 className="text-2xl font-semibold">Products & Pricing</h2>
       </div>
 
       {/* Tabs */}

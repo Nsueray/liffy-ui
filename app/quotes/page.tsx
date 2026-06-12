@@ -48,12 +48,11 @@ interface Quote {
   is_expired: boolean;
   office_id: string;
   expo_id: string;
-  company_id: string;
+  company_name: string;
   person_id: string | null;
   sales_owner_user_id: string;
   created_by_user_id: string;
   office_code: string;
-  company_name?: string;
   expo_name?: string;
   person_first_name?: string;
   person_last_name?: string;
@@ -62,7 +61,6 @@ interface Quote {
   owner_last_name?: string;
   line_items: LineItem[];
   totals: Totals;
-  company?: { name: string; country_code: string };
   expo?: { name: string; payment_deadline: string };
   person?: { first_name: string; last_name: string; email: string };
   sales_owner?: { first_name: string; last_name: string; email: string };
@@ -93,7 +91,7 @@ interface Totals {
 
 interface Office { id: string; code: string; name: string; default_currency: string | null; }
 interface Expo { id: string; name: string; country_code: string; payment_deadline: string | null; default_currency: string | null; }
-interface Company { id: string; name: string; name_normalized: string; country_code: string; }
+interface PersonOption { id: string; first_name: string; last_name: string; email: string; company_name?: string; }
 interface Product { id: string; code: string; name: string; category: string | null; unit_type: string; prices?: ProductPrice[]; }
 interface ProductPrice { office_id: string; office_code: string; currency: string; unit_price: string; }
 interface ExchangeRate { currency: string; rate_to_eur: string; updated_at: string; }
@@ -147,13 +145,23 @@ export default function QuotesPage() {
   // Reference data
   const [offices, setOffices] = useState<Office[]>([]);
   const [expos, setExpos] = useState<Expo[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [rates, setRates] = useState<ExchangeRate[]>([]);
 
+  // Company autocomplete
+  const [companyQuery, setCompanyQuery] = useState('');
+  const [companySuggestions, setCompanySuggestions] = useState<{ company_name: string; contact_count: number }[]>([]);
+  const [companyOpen, setCompanyOpen] = useState(false);
+
+  // Person autocomplete
+  const [personQuery, setPersonQuery] = useState('');
+  const [personSuggestions, setPersonSuggestions] = useState<PersonOption[]>([]);
+  const [personOpen, setPersonOpen] = useState(false);
+  const [selectedPersonLabel, setSelectedPersonLabel] = useState('');
+
   // Form state
   const [formData, setFormData] = useState({
-    expo_id: '', company_id: '', person_id: '', office_id: '', currency: '',
+    expo_id: '', company_name: '', person_id: '', office_id: '', currency: '',
     exchange_rate_to_eur: '', valid_until: '', notes: '', subject: '',
   });
   const [formLines, setFormLines] = useState<{
@@ -189,16 +197,14 @@ export default function QuotesPage() {
 
   const fetchRefData = useCallback(async () => {
     const h = { headers: authHeaders() };
-    const [offRes, exRes, compRes, prodRes, rateRes] = await Promise.all([
+    const [offRes, exRes, prodRes, rateRes] = await Promise.all([
       fetch(`${API_BASE}/api/quotes/offices`, h),
       fetch(`${API_BASE}/api/quotes/expos`, h),
-      fetch(`${API_BASE}/api/companies?limit=100`, h),
       fetch(`${API_BASE}/api/quotes/products`, h),
       fetch(`${API_BASE}/api/quotes/exchange-rates`, h),
     ]);
     if (offRes.ok) setOffices(await offRes.json());
     if (exRes.ok) setExpos(await exRes.json());
-    if (compRes.ok) { const d = await compRes.json(); setCompanies(d.companies || d); }
     if (prodRes.ok) setProducts(await prodRes.json());
     if (rateRes.ok) setRates(await rateRes.json());
   }, []);
@@ -219,7 +225,9 @@ export default function QuotesPage() {
     setFormMode('create');
     // Default office from user
     const userOfficeId = offices.length === 1 ? offices[0].id : '';
-    setFormData({ expo_id: '', company_id: '', person_id: '', office_id: userOfficeId, currency: '', exchange_rate_to_eur: '', valid_until: '', notes: '', subject: '' });
+    setFormData({ expo_id: '', company_name: '', person_id: '', office_id: userOfficeId, currency: '', exchange_rate_to_eur: '', valid_until: '', notes: '', subject: '' });
+    setCompanyQuery(''); setCompanySuggestions([]); setCompanyOpen(false);
+    setPersonQuery(''); setPersonSuggestions([]); setPersonOpen(false); setSelectedPersonLabel('');
     setFormLines([{ product_id: '', description: '', unit_type: 'unit', quantity: 1, unit_price: 0, discount_percent: 0, tax_percent: 0 }]);
     setView('form');
   };
@@ -227,8 +235,12 @@ export default function QuotesPage() {
   const openEdit = () => {
     if (!selectedQuote) return;
     setFormMode('edit');
+    setCompanyQuery(selectedQuote.company_name || '');
+    setCompanySuggestions([]); setCompanyOpen(false);
+    const pLabel = selectedQuote.person ? `${selectedQuote.person.first_name || ''} ${selectedQuote.person.last_name || ''}`.trim() || selectedQuote.person.email : '';
+    setPersonQuery(pLabel); setSelectedPersonLabel(pLabel); setPersonSuggestions([]); setPersonOpen(false);
     setFormData({
-      expo_id: selectedQuote.expo_id, company_id: selectedQuote.company_id,
+      expo_id: selectedQuote.expo_id, company_name: selectedQuote.company_name || '',
       person_id: selectedQuote.person_id || '', office_id: selectedQuote.office_id,
       currency: selectedQuote.currency, exchange_rate_to_eur: selectedQuote.exchange_rate_to_eur,
       valid_until: selectedQuote.valid_until?.slice(0, 10) || '', notes: selectedQuote.notes || '',
@@ -269,6 +281,50 @@ export default function QuotesPage() {
     } : li));
   };
 
+  // Company autocomplete search
+  const searchCompanies = useCallback(async (q: string) => {
+    if (q.length < 2) { setCompanySuggestions([]); return; }
+    try {
+      const res = await fetch(`${API_BASE}/api/companies?search=${encodeURIComponent(q)}&limit=20`, { headers: authHeaders() });
+      if (res.ok) {
+        const d = await res.json();
+        setCompanySuggestions((d.companies || d).map((c: { company_name: string; contact_count: number }) => ({
+          company_name: c.company_name, contact_count: c.contact_count,
+        })));
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Person autocomplete search
+  const searchPersons = useCallback(async (q: string) => {
+    if (q.length < 2) { setPersonSuggestions([]); return; }
+    try {
+      const params = new URLSearchParams({ search: q, limit: '20' });
+      if (formData.company_name) params.set('company', formData.company_name);
+      const res = await fetch(`${API_BASE}/api/persons?${params}`, { headers: authHeaders() });
+      if (res.ok) {
+        const d = await res.json();
+        setPersonSuggestions((d.persons || d).map((p: PersonOption) => ({
+          id: p.id, first_name: p.first_name, last_name: p.last_name,
+          email: p.email, company_name: p.company_name,
+        })));
+      }
+    } catch { /* ignore */ }
+  }, [formData.company_name]);
+
+  // Debounced search effects
+  useEffect(() => {
+    if (!companyOpen) return;
+    const t = setTimeout(() => searchCompanies(companyQuery), 300);
+    return () => clearTimeout(t);
+  }, [companyQuery, companyOpen, searchCompanies]);
+
+  useEffect(() => {
+    if (!personOpen) return;
+    const t = setTimeout(() => searchPersons(personQuery), 300);
+    return () => clearTimeout(t);
+  }, [personQuery, personOpen, searchPersons]);
+
   const addLine = () => setFormLines(p => [...p, { product_id: '', description: '', unit_type: 'unit', quantity: 1, unit_price: 0, discount_percent: 0, tax_percent: 0 }]);
   const removeLine = (idx: number) => setFormLines(p => p.filter((_, i) => i !== idx));
   const updateLine = (idx: number, field: string, value: string | number) => {
@@ -296,7 +352,7 @@ export default function QuotesPage() {
     try {
       if (formMode === 'create') {
         const body = {
-          ...formData, person_id: formData.person_id || undefined,
+          ...formData, company_name: formData.company_name.trim(), person_id: formData.person_id || undefined,
           exchange_rate_to_eur: Number(formData.exchange_rate_to_eur) || undefined,
           line_items: formLines.filter(li => li.description),
         };
@@ -381,7 +437,7 @@ export default function QuotesPage() {
         <div className="flex gap-2">
           {isAdmin() && (
             <Link href="/quotes/catalog">
-              <Button variant="outline"><Settings className="h-4 w-4 mr-2" /> Catalog</Button>
+              <Button variant="outline"><Settings className="h-4 w-4 mr-2" /> Products & Pricing</Button>
             </Link>
           )}
           <Button onClick={openCreate} className="bg-orange-500 hover:bg-orange-600">
@@ -495,7 +551,7 @@ export default function QuotesPage() {
         {/* Header info */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card><CardContent className="p-4"><div className="text-xs text-gray-500">Subject</div><div className="font-medium mt-1">{q.subject}</div></CardContent></Card>
-          <Card><CardContent className="p-4"><div className="text-xs text-gray-500">Company</div><div className="font-medium mt-1">{q.company?.name || q.company_name || '—'}</div></CardContent></Card>
+          <Card><CardContent className="p-4"><div className="text-xs text-gray-500">Company</div><div className="font-medium mt-1">{q.company_name || '—'}</div></CardContent></Card>
           <Card><CardContent className="p-4"><div className="text-xs text-gray-500">Expo</div><div className="font-medium mt-1">{q.expo?.name || q.expo_name || '—'}</div></CardContent></Card>
           <Card><CardContent className="p-4"><div className="text-xs text-gray-500">Contact</div><div className="font-medium mt-1">{q.person ? `${q.person.first_name || ''} ${q.person.last_name || ''}`.trim() || q.person.email : '—'}</div></CardContent></Card>
           <Card><CardContent className="p-4"><div className="text-xs text-gray-500">Office</div><div className="font-medium mt-1">{q.office_code}</div></CardContent></Card>
@@ -624,13 +680,28 @@ export default function QuotesPage() {
                   {expos.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
               </div>
-              <div>
+              <div className="relative">
                 <label className="text-sm font-medium">Company *</label>
-                <select className="w-full border rounded-md px-3 py-2 text-sm mt-1" value={formData.company_id}
-                  onChange={e => setFormData(p => ({ ...p, company_id: e.target.value }))} disabled={isDraftEdit}>
-                  <option value="">Select company...</option>
-                  {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <Input className="mt-1" placeholder="Type 2+ characters to search..." disabled={isDraftEdit}
+                  value={companyQuery}
+                  onChange={e => { setCompanyQuery(e.target.value); setFormData(p => ({ ...p, company_name: e.target.value })); setCompanyOpen(true); }}
+                  onFocus={() => companyQuery.length >= 2 && setCompanyOpen(true)}
+                  onBlur={() => setTimeout(() => setCompanyOpen(false), 200)} />
+                {companyOpen && companySuggestions.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-auto">
+                    {companySuggestions.map((c, i) => (
+                      <div key={i} className="px-3 py-2 text-sm hover:bg-orange-50 cursor-pointer flex justify-between"
+                        onMouseDown={() => {
+                          setFormData(p => ({ ...p, company_name: c.company_name }));
+                          setCompanyQuery(c.company_name);
+                          setCompanyOpen(false);
+                        }}>
+                        <span>{c.company_name}</span>
+                        <span className="text-gray-400 text-xs">{c.contact_count} contacts</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium">Office *</label>
@@ -660,6 +731,37 @@ export default function QuotesPage() {
                 <label className="text-sm font-medium">Valid Until</label>
                 <Input type="date" className="mt-1" value={formData.valid_until}
                   onChange={e => setFormData(p => ({ ...p, valid_until: e.target.value }))} />
+              </div>
+              <div className="relative">
+                <label className="text-sm font-medium">Contact Person</label>
+                <Input className="mt-1" placeholder="Search by name or email..."
+                  value={personQuery}
+                  onChange={e => { setPersonQuery(e.target.value); setPersonOpen(true); if (!e.target.value) { setFormData(p => ({ ...p, person_id: '' })); setSelectedPersonLabel(''); } }}
+                  onFocus={() => personQuery.length >= 2 && setPersonOpen(true)}
+                  onBlur={() => setTimeout(() => setPersonOpen(false), 200)} />
+                {formData.person_id && selectedPersonLabel && (
+                  <button type="button" className="absolute right-2 top-8 text-gray-400 hover:text-gray-600"
+                    onClick={() => { setFormData(p => ({ ...p, person_id: '' })); setPersonQuery(''); setSelectedPersonLabel(''); }}>
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+                {personOpen && personSuggestions.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-auto">
+                    {personSuggestions.map(p => (
+                      <div key={p.id} className="px-3 py-2 text-sm hover:bg-orange-50 cursor-pointer"
+                        onMouseDown={() => {
+                          const label = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.email;
+                          setFormData(prev => ({ ...prev, person_id: p.id }));
+                          setPersonQuery(label);
+                          setSelectedPersonLabel(label);
+                          setPersonOpen(false);
+                        }}>
+                        <div className="font-medium">{p.first_name} {p.last_name}</div>
+                        <div className="text-xs text-gray-400">{p.email}{p.company_name ? ` · ${p.company_name}` : ''}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium">Subject</label>
@@ -746,7 +848,7 @@ export default function QuotesPage() {
         {/* Save */}
         <div className="flex gap-3 justify-end">
           <Button variant="outline" onClick={() => selectedQuote ? openDetail(selectedQuote.id) : setView('list')}>Cancel</Button>
-          <Button className="bg-orange-500 hover:bg-orange-600" onClick={handleSave} disabled={saving || !formData.expo_id || !formData.company_id}>
+          <Button className="bg-orange-500 hover:bg-orange-600" onClick={handleSave} disabled={saving || !formData.expo_id || !formData.company_name.trim()}>
             {saving ? 'Saving...' : formMode === 'create' ? 'Create Quote' : 'Save Changes'}
           </Button>
         </div>
