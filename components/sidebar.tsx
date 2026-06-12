@@ -37,6 +37,7 @@ import {
   Shield,
   Zap,
   Pickaxe,
+  Receipt,
 } from "lucide-react";
 import { logoutClient } from "@/lib/auth";
 
@@ -112,6 +113,12 @@ const menuItems = [
     href: "/templates",
     icon: FileText,
     description: "Email templates"
+  },
+  {
+    name: "Quotes",
+    href: "/quotes",
+    icon: Receipt,
+    description: "Quotations & proposals"
   },
   {
     name: "Reports",
